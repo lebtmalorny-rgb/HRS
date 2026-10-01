@@ -62,6 +62,7 @@
     <strong data-title>Начальное состояние</strong>
     <span class="text-small text-muted" data-motion></span>
   </div>
+  <div class="ha-caption text-small" data-route></div>
   <div class="ha-caption text-small" data-detail></div>
   <svg class="ha-scene" role="img" aria-label="Схема участников HA и состояние виртуальной машины"></svg>
   <div class="ha-legend text-small" aria-label="Обозначения сообщений">
@@ -214,6 +215,21 @@
       let sceneWidth = 0;
       const current = () => traces[mode].frames[index];
       const next = () => traces[mode].frames[index + 1];
+      const inTransit = () => Boolean(next() && (playing || progress > 0));
+      const displayed = () => inTransit() ? next() : current();
+      const actorNames = { detector: 'Consul / monitor', controller: 'Recovery C0', powerops: 'PowerOps', tooz: 'Tooz', etcd: 'etcd', ironic: 'Ironic / BMC', nova: 'Nova', source: 'Hsrc', target: 'Hdst' };
+      function describeEvent(frame) {
+        const m = frame.signal;
+        if (!m) return 'Начальное состояние · сообщения ещё не отправлены';
+        if (m.from === m.to) {
+          const kind = frame.id === 'K10' ? 'Ожидание внутри компонента' : frame.id === 'U01' ? 'Локальный тайм-аут' : 'Локальное действие';
+          return `${kind}: ${actorNames[m.from]} · ${m.label}`;
+        }
+        const kind = { command: 'Команда / запрос', observation: 'Ответ / результат', effect: 'Физический эффект', loss: 'Отказ / потеря' }[m.kind];
+        const routeLabel = [m.from, ...m.via, m.to].map(id => actorNames[id]).join(' → ');
+        const folded = ['K06', 'K08', 'K09'].includes(frame.id) ? ' · запросы UUID-проверок свёрнуты' : ['T10', 'T14'].includes(frame.id) ? ' · повторные чтения polling свёрнуты' : '';
+        return `${kind}: ${routeLabel} · ${m.label}${folded}`;
+      }
       const make = (name, attrs = {}, text, parent = svg) => {
         const element = document.createElementNS(ns, name);
         Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, String(value)));
@@ -287,10 +303,16 @@
         svg.replaceChildren();
         svg.setAttribute('viewBox', `0 0 ${sceneWidth} ${worldY + 126}`);
         svg.setAttribute('height', worldY + 126);
-        const title = `${current().id}: ${current().title}. Источник ${s.world.sourcePower === 'on' ? 'включён' : 'выключен'}. Знание Off: ${s.knowledge.power}. Фаза ${s.protocol.phase}${s.protocol.blocked ? ', BLOCKED' : ''}.`;
+        const event = displayed();
+        const title = `${event.id}: ${event.title}. ${describeEvent(event)}. Состояния после кадра ${index + 1}. Источник ${s.world.sourcePower === 'on' ? 'включён' : 'выключен'}. Фаза ${s.protocol.phase}${s.protocol.blocked ? ', BLOCKED' : ''}.`;
         svg.setAttribute('aria-label', title);
         make('title', {}, title);
-        make('desc', {}, current().detail);
+        make('desc', {}, event.detail);
+        const defs = make('defs');
+        Object.entries(colors).forEach(([kind, color]) => {
+          const marker = make('marker', { id: `ha-recovery-arrow-${kind}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' }, undefined, defs);
+          make('path', { d: 'M 0 1 L 9 5 L 0 9 Z', fill: color }, undefined, marker);
+        });
         const processX = narrow ? 10 : middle - 8;
         const processY = narrow ? 140 : 8;
         const processW = narrow ? sceneWidth - 20 : sceneWidth - processX - 10;
@@ -314,45 +336,62 @@
         node('source', col < 140 ? 'Hsrc' : 'Hsrc · источник', [s.world.sourcePower === 'on' ? 'Питание ON' : 'Питание OFF', s.world.sourceVM === 'running' ? 'v0 · работает' : 'v0 · остановлен', s.protocol.blocked ? 'Возврат: нет' : `Карантин: ${s.protocol.quarantine ? 'да' : 'нет'}`], s.world.sourceVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
         const targetVM = s.world.targetVM === 'absent' ? 'Нет ВМ' : s.world.targetVM === 'running' ? 'v1 · работает' : 'v1 · остановлен';
         node('target', col < 130 ? 'Hdst · цель' : 'Hdst · назначение', ['Питание ON', targetVM, 'Данные: да'], s.world.targetVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
-        const upcoming = next();
         activePath = null; packet = null; packetLength = 0;
-        if (upcoming?.signal) {
-          const m = upcoming.signal;
-          const hops = [m.from, ...m.via, m.to];
-          const path = hops.slice(1).map((to, i) => route(hops[i], to)).join(' ');
-          activePath = make('path', { d: path, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.kind === 'observation' ? '5 4' : 'none', visibility: 'hidden' });
-          packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden' });
-          packetLength = activePath.getTotalLength();
+        if (event.signal) {
+          const m = event.signal;
+          if (m.from === m.to) {
+            const group = svg.querySelector(`[data-node="${m.from}"]`);
+            group.setAttribute('data-activity', event.id === 'K10' ? 'wait' : 'local');
+            group.querySelector('rect').setAttribute('stroke', colors[m.kind]);
+            group.querySelector('rect').setAttribute('stroke-width', 2);
+          } else {
+            const layer = make('g', { 'data-event-route': `${m.from}->${m.to}`, 'data-event-kind': m.kind });
+            svg.insertBefore(layer, svg.querySelector('[data-node]'));
+            const hops = [m.from, ...m.via, m.to];
+            const paths = hops.slice(1).map((to, i) => {
+              const d = route(hops[i], to);
+              make('path', { d, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.lost ? '55 100' : m.kind === 'observation' ? '5 4' : 'none', ...(m.lost ? { pathLength: 100 } : { 'marker-end': `url(#ha-recovery-arrow-${m.kind})` }), 'data-hop': `${hops[i]}->${to}` }, undefined, layer);
+              return d;
+            });
+            // Join entry and exit through intermediate components. The packet
+            // passes behind their opaque nodes instead of jumping across gaps.
+            const motionPath = paths.map((d, i) => i ? d.replace(/^M /, 'L ') : d).join(' ');
+            activePath = make('path', { d: motionPath, fill: 'none', stroke: 'none', 'aria-hidden': 'true' }, undefined, layer);
+            packetLength = activePath.getTotalLength();
+            packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden', 'data-packet': 'true' }, undefined, layer);
+            if (m.lost) {
+              const p = activePath.getPointAtLength(packetLength * 0.55);
+              text(p.x - 4, p.y + 4, '×', 'ha-node-title', layer);
+            }
+          }
         }
         drawPacket();
       }
       function drawPacket() {
         if (!packet || !activePath) return;
-        const visible = progress > 0;
-        activePath.setAttribute('visibility', visible ? 'visible' : 'hidden');
-        const m = next().signal;
-        const t = reducedMotion.matches ? 0.5 : progress;
-        const distance = m.lost ? Math.min(t, 0.55) : t;
+        const m = displayed().signal;
+        const visible = inTransit() && progress > 0 && !reducedMotion.matches;
+        const distance = m.lost ? Math.min(progress, 0.55) : progress;
         const p = activePath.getPointAtLength(packetLength * distance);
         packet.setAttribute('cx', p.x);
         packet.setAttribute('cy', p.y);
         packet.setAttribute('visibility', visible && !(m.lost && progress > 0.72) ? 'visible' : 'hidden');
-        packet.setAttribute('r', m.from === m.to && !reducedMotion.matches ? 4 + 3 * Math.sin(Math.PI * progress) : 5);
       }
       function renderUI() {
         const frames = traces[mode].frames;
-        const frame = current(), s = frame.state;
+        const frame = current(), s = frame.state, event = displayed();
         q('[data-count]').textContent = `${index + 1} / ${frames.length}`;
         q('[data-position]').max = frames.length - 1;
         q('[data-position]').value = index;
         q('[data-position]').setAttribute('aria-valuetext', `${index + 1}: ${frame.id}, ${frame.title}`);
-        q('[data-title]').textContent = `${frame.id} · ${frame.title}`;
-        q('[data-detail]').textContent = frame.detail;
+        q('[data-title]').textContent = `${event.id} · ${event.title}`;
+        q('[data-route]').textContent = describeEvent(event);
+        q('[data-detail]').textContent = event.detail;
         q('[data-prev]').disabled = index === 0 && progress === 0;
         q('[data-next]').disabled = index === frames.length - 1;
         q('[data-play]').textContent = playing ? 'Пауза' : index === frames.length - 1 ? 'Повторить' : 'Воспроизвести';
         q('[data-play]').setAttribute('aria-pressed', String(playing));
-        q('[data-motion]').textContent = progress > 0 || playing ? ` → ${next()?.signal?.label || next()?.title || ''}${playing ? '' : ' · пауза'}` : '';
+        q('[data-motion]').textContent = inTransit() ? ` · ${playing ? 'Выполняется' : 'Пауза в переходе'} · состояния до события, после кадра ${index + 1}` : index ? ` · ${event.id === 'K10' ? 'Ожидание продолжается' : 'Событие завершено'} · состояния после кадра ${index + 1}` : '';
         q('[data-profile]').textContent = mode === 'hold' ? 'P0: all_down по трём сетям.' : 'P1: recovery разрешено исследовательской политикой.';
         q('[data-contract]').textContent = mode === 'hold' ? 'При down/up/up ВМ продолжает работать.' : 'PowerOps включён · auto recovery · ACTIVE → ACTIVE.';
         for (const key of ['host', 'global']) {
@@ -399,7 +438,7 @@
         if (playing) raf = requestAnimationFrame(tick);
       }
       q('[data-play]').addEventListener('click', () => {
-        if (playing) { stop(); renderUI(); return; }
+        if (playing) { stop(); render(); return; }
         if (index === traces[mode].frames.length - 1) { index = 0; progress = 0; }
         playing = true; lastTime = null; render(); raf = requestAnimationFrame(tick);
       });
@@ -410,7 +449,7 @@
       q('[data-speed]').addEventListener('change', event => { speed = Number(event.target.value); });
       q('[data-scenario]').addEventListener('change', event => { mode = event.target.value; seek(0); });
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden && playing) { stop(); renderUI(); }
+        if (document.hidden && playing) { stop(); render(); }
       });
       reducedMotion.addEventListener('change', drawPacket);
       new ResizeObserver(() => {
