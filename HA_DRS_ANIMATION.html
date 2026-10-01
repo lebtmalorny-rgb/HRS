@@ -1,0 +1,1816 @@
+<!doctype html>
+<html lang="ru" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>HA/DRS — координация PowerOps</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="HA/DRS — координация PowerOps" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;ru&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;HA/DRS — координация PowerOps&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;ha-recovery-animation&quot; lang=&quot;ru&quot;&gt;
+  &lt;style&gt;
+    #ha-recovery-animation { max-width: 1000px; margin: 0 auto; }
+    #ha-recovery-animation .ha-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; }
+    #ha-recovery-animation .ha-controls { margin: 12px 0; }
+    #ha-recovery-animation .ha-event { margin-top: 14px; }
+    #ha-recovery-animation .ha-caption { margin: 8px 0; }
+    #ha-recovery-animation .ha-scene { display: block; width: 100%; }
+    #ha-recovery-animation .ha-scene text { font-size: 12px; font-weight: 400; fill: var(--foreground); }
+    #ha-recovery-animation .ha-scene .ha-node-title { font-weight: 500; }
+    #ha-recovery-animation .ha-scene .ha-secondary { fill: var(--muted-foreground); }
+    #ha-recovery-animation .ha-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 8px 0; }
+    #ha-recovery-animation .ha-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    #ha-recovery-animation .ha-swatch { width: 18px; height: 3px; display: inline-block; }
+    #ha-recovery-animation .ha-command { background: var(--viz-series-1); }
+    #ha-recovery-animation .ha-observation { background: var(--viz-series-2); }
+    #ha-recovery-animation .ha-effect { background: var(--viz-series-3); }
+    #ha-recovery-animation .ha-loss { background: var(--viz-series-4); }
+    #ha-recovery-animation .ha-guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 7px 16px; padding: 0; margin: 10px 0; list-style: none; }
+    #ha-recovery-animation .ha-guards li { display: flex; gap: 8px; align-items: baseline; }
+    #ha-recovery-animation .ha-guard-mark { flex: 0 0 14px; }
+    #ha-recovery-animation .ha-trace-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
+    #ha-recovery-animation .ha-locks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 12px 0; }
+    #ha-recovery-animation .ha-locks code { overflow-wrap: anywhere; }
+  &lt;/style&gt;
+
+  &lt;div class=&quot;ha-top&quot;&gt;
+    &lt;h3&gt;HA · Координация PowerOps&lt;/h3&gt;
+    &lt;span class=&quot;text-small text-muted&quot;&gt;SC-01 · учебная анимация&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;viz-controls ha-controls&quot;&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Сценарий
+      &lt;select class=&quot;form-select&quot; data-scenario&gt;
+        &lt;option value=&quot;normal&quot;&gt;C02 · P1 · штатное восстановление&lt;/option&gt;
+        &lt;option value=&quot;lost&quot;&gt;C03 · P1 · тайм-аут подтверждения Off&lt;/option&gt;
+        &lt;option value=&quot;hold&quot;&gt;C01 · P0 · политика all_down&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Скорость анимации
+      &lt;select class=&quot;form-select&quot; data-speed&gt;
+        &lt;option value=&quot;0.5&quot;&gt;0,5×&lt;/option&gt;
+        &lt;option value=&quot;1&quot; selected&gt;1×&lt;/option&gt;
+        &lt;option value=&quot;2&quot;&gt;2×&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;viz-controls&quot;&gt;
+    &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; data-play&gt;Воспроизвести&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; data-prev&gt;Назад&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; data-next&gt;Вперёд&lt;/button&gt;
+    &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; data-reset&gt;В начало&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;ha-trace-meta text-small text-muted&quot;&gt;
+    &lt;span data-profile&gt;P1: recovery разрешено исследовательской политикой.&lt;/span&gt;
+    &lt;span data-contract&gt;PowerOps включён · auto recovery · ACTIVE → ACTIVE.&lt;/span&gt;
+    &lt;span&gt;Сети: manage / tenant / storage.&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;label class=&quot;form-label&quot;&gt;Логический кадр &lt;output class=&quot;tabular-nums&quot; data-count&gt;1&lt;/output&gt;
+    &lt;input class=&quot;form-range&quot; data-position type=&quot;range&quot; min=&quot;0&quot; max=&quot;1&quot; value=&quot;0&quot; step=&quot;1&quot; aria-label=&quot;Выбрать логический кадр&quot;&gt;
+  &lt;/label&gt;
+  &lt;div class=&quot;ha-event&quot; aria-live=&quot;polite&quot; aria-atomic=&quot;true&quot;&gt;
+    &lt;strong data-title&gt;Начальное состояние&lt;/strong&gt;
+    &lt;span class=&quot;text-small text-muted&quot; data-motion&gt;&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;ha-caption text-small&quot; data-detail&gt;&lt;/div&gt;
+  &lt;svg class=&quot;ha-scene&quot; role=&quot;img&quot; aria-label=&quot;Схема участников HA и состояние виртуальной машины&quot;&gt;&lt;/svg&gt;
+  &lt;div class=&quot;ha-legend text-small&quot; aria-label=&quot;Обозначения сообщений&quot;&gt;
+    &lt;span&gt;&lt;i class=&quot;ha-swatch ha-command&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Команда / запрос&lt;/span&gt;
+    &lt;span&gt;&lt;i class=&quot;ha-swatch ha-observation&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Подтверждение&lt;/span&gt;
+    &lt;span&gt;&lt;i class=&quot;ha-swatch ha-effect&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Физический эффект&lt;/span&gt;
+    &lt;span&gt;&lt;i class=&quot;ha-swatch ha-loss&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Отказ / потеря&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;ha-locks text-small&quot; aria-label=&quot;Блокировки: состояние backend и подтверждение для C0&quot;&gt;
+    &lt;div&gt;&lt;code&gt;powerops/host/Hsrc&lt;/code&gt;&lt;br&gt;&lt;span data-lock-host&gt;&lt;/span&gt;&lt;/div&gt;
+    &lt;div&gt;&lt;code&gt;powerops/evacuation/global&lt;/code&gt;&lt;br&gt;&lt;span data-lock-global&gt;&lt;/span&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;ha-caption&quot;&gt;&lt;strong data-gate&gt;Допуск evacuation: нет&lt;/strong&gt;&lt;/div&gt;
+  &lt;ul class=&quot;ha-guards text-small&quot; data-guards aria-label=&quot;Условия модели и глобальная блокировка PowerOps&quot;&gt;&lt;/ul&gt;
+  &lt;div class=&quot;ha-caption text-small text-muted&quot;&gt;UUID-check подтверждает владение в момент проверки. Heartbeat не заменяет эту проверку и не отменяет отправленный запрос.&lt;/div&gt;
+  &lt;div class=&quot;ha-caption text-small text-muted&quot;&gt;Предпосылка: после fencing изоляция Hsrc сохраняется до отдельной процедуры возврата.&lt;/div&gt;
+  &lt;div class=&quot;ha-caption text-small text-muted&quot;&gt;Профиль исходников Masakari 1.0.1: global lock, без per-target guard. K — детализация координации; время условное, не измерение стенда и не результат TLC.&lt;/div&gt;
+  &lt;noscript&gt;Для управления анимацией нужен JavaScript. Текстовый сценарий: HA_DRS_SCENARIO_01.md.&lt;/noscript&gt;
+
+  &lt;script&gt;
+    (() =&gt; {
+      // TRACE DATA START
+      const guardLabels = {
+        owner: &#x27;Host lock: UUID подтверждён&#x27;,
+        policy: &#x27;Политика разрешает recovery&#x27;,
+        off: &#x27;Есть актуальное Off evidence&#x27;,
+        nova: &#x27;Nova: disabled / down&#x27;,
+        reconciled: &#x27;Нет неизвестной предшествующей команды&#x27;,
+        target: &#x27;Hdst совместим и свободен — A03/A06&#x27;,
+        global: &#x27;Global lock: UUID подтверждён&#x27;
+      };
+      function buildTrace(mode) {
+        let state = {
+          world: { management: &#x27;up&#x27;, sourcePower: &#x27;on&#x27;, sourceVM: &#x27;running&#x27;, targetVM: &#x27;absent&#x27; },
+          knowledge: { networks: &#x27;up / up / up&#x27;, power: &#x27;unknown&#x27;, nova: &#x27;enabled / up&#x27;, vmHost: &#x27;Hsrc&#x27;, vmState: &#x27;ACTIVE&#x27;, owner: &#x27;нет&#x27; },
+          protocol: { phase: &#x27;OBSERVING&#x27;, blocked: false, quarantine: false },
+          locks: { host: &#x27;free&#x27;, global: &#x27;free&#x27; },
+          coordination: { heartbeat: false, hostView: &#x27;не получен&#x27;, globalView: &#x27;не получен&#x27;, check: &#x27;Нет проверок&#x27;, interval: false },
+          guards: { owner: false, policy: false, off: false, nova: false, reconciled: true, target: true, global: false },
+          operations: { fence: &#x27;NOT_SENT&#x27;, evacuate: &#x27;NOT_SENT&#x27;, start: &#x27;NOT_SENT&#x27; },
+          commandCount: { fence: 0, evacuate: 0, start: 0 }
+        };
+        const frames = [];
+        const add = (id, title, detail, patch = {}, signal = null) =&gt; {
+          for (const [key, values] of Object.entries(patch)) state[key] = { ...state[key], ...values };
+          frames.push({ id, title, detail, state: structuredClone(state), signal });
+        };
+        const signal = (from, to, kind, label, lost = false, via = []) =&gt; ({ from, to, kind, label, lost, via });
+        const finish = id =&gt; ({ id, profile: mode === &#x27;hold&#x27; ? &#x27;P0-ALL-DOWN&#x27; : &#x27;P1-POWEROPS-AUTO-GLOBAL&#x27;, origin: &#x27;illustration&#x27;, modelVersion: &#x27;HA-MODEL-0.1&#x27;, frames });
+        const releaseHost = () =&gt; {
+          add(&#x27;K13&#x27;, &#x27;Выход из recovery: освобождение host lock&#x27;, &#x27;Завершение dispatch раскручивает контекст lock. Tooz отправляет release; это не команда включить Hsrc.&#x27;,
+            {}, signal(&#x27;powerops&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;release host lock&#x27;, false, [&#x27;tooz&#x27;]));
+          add(&#x27;K14&#x27;, &#x27;Освобождение host lock подтверждено&#x27;, &#x27;В этой трассе release успешен. При ошибке освобождения подтверждение нельзя было бы считать полученным.&#x27;,
+            { locks: { host: &#x27;free&#x27; }, coordination: { hostView: &#x27;освобождён&#x27;, check: &#x27;Locks отпущены&#x27; }, knowledge: { owner: &#x27;нет&#x27; }, guards: { owner: false } },
+            signal(&#x27;etcd&#x27;, &#x27;powerops&#x27;, &#x27;observation&#x27;, &#x27;release = True&#x27;, false, [&#x27;tooz&#x27;]));
+          add(&#x27;K15&#x27;, &#x27;Tooz coordinator остановлен&#x27;, &#x27;Heartbeat прекращается после выхода из PowerOpsCoordinator. Освобождение locks не отменяет внешний эффект и не возвращает источник в работу.&#x27;,
+            { coordination: { heartbeat: false } }, signal(&#x27;powerops&#x27;, &#x27;tooz&#x27;, &#x27;command&#x27;, &#x27;coordinator.stop()&#x27;));
+        };
+        add(&#x27;INIT&#x27;, &#x27;Начальное состояние&#x27;, &#x27;Единственный экземпляр v0 работает на Hsrc. На Hdst экземпляра ВМ нет.&#x27;);
+        add(&#x27;T01&#x27;, &#x27;Management-связь потеряна&#x27;, &#x27;Меняется связность мира. ВМ продолжает работать; детектор пока хранит прежнее наблюдение.&#x27;,
+          { world: { management: &#x27;down&#x27; } }, signal(&#x27;source&#x27;, &#x27;detector&#x27;, &#x27;loss&#x27;, &#x27;Потеря связи&#x27;, true));
+        add(&#x27;T02&#x27;, &#x27;Детектор получил новые наблюдения&#x27;, &#x27;Свежий вектор down/up/up означает потерю одной из трёх наблюдаемых сетей.&#x27;,
+          { knowledge: { networks: &#x27;down / up / up&#x27; }, protocol: { phase: &#x27;SUSPECTED&#x27; } }, signal(&#x27;detector&#x27;, &#x27;detector&#x27;, &#x27;observation&#x27;, &#x27;Новые наблюдения&#x27;));
+        if (mode === &#x27;hold&#x27;) {
+          add(&#x27;T03&#x27;, &#x27;all_down не разрешает recovery&#x27;, &#x27;При down/up/up политика P0 оставляет процесс в POLICY_HOLD. Fencing и evacuation не отправляются; v0 работает.&#x27;,
+            { protocol: { phase: &#x27;POLICY_HOLD&#x27; } }, signal(&#x27;detector&#x27;, &#x27;detector&#x27;, &#x27;observation&#x27;, &#x27;Recovery не разрешено&#x27;));
+          return finish(&#x27;C01&#x27;);
+        }
+        add(&#x27;T05&#x27;, &#x27;P1 разрешает рассмотреть recovery&#x27;, &#x27;Это явное исследовательское допущение: разрешающая политика и включённая PowerOps-ветка.&#x27;,
+          { guards: { policy: true } }, signal(&#x27;detector&#x27;, &#x27;controller&#x27;, &#x27;command&#x27;, &#x27;Уведомление&#x27;));
+        add(&#x27;K01&#x27;, &#x27;PowerOps запускает Tooz coordinator&#x27;, &#x27;Оба — код внутри процесса Masakari engine. start(start_heart=True) включает фоновый heartbeat; backend — etcd3+http(s).&#x27;,
+          { coordination: { heartbeat: true } }, signal(&#x27;powerops&#x27;, &#x27;tooz&#x27;, &#x27;command&#x27;, &#x27;start_heart=True&#x27;));
+        add(&#x27;K02&#x27;, &#x27;Tooz приобретает host lock в etcd&#x27;, &#x27;powerops/host/Hsrc охватывает весь recovery хоста. Backend уже выдал lock, но PowerOps ещё должен проверить UUID владельца.&#x27;,
+          { locks: { host: &#x27;C0&#x27; }, coordination: { hostView: &#x27;ожидает UUID-check&#x27; } },
+          signal(&#x27;powerops&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;acquire host lock&#x27;, false, [&#x27;tooz&#x27;]));
+        add(&#x27;K03&#x27;, &#x27;PowerOps проверяет владение host lock&#x27;, &#x27;assert_healthy() проверяет живость heartbeat thread и выполняет etcd txn: значение ключа равно UUID lock. UUID lock — не notification_uuid.&#x27;,
+          {}, signal(&#x27;powerops&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;etcd txn: VALUE == lock UUID&#x27;, false, [&#x27;tooz&#x27;]));
+        add(&#x27;K04 / T05&#x27;, &#x27;UUID подтверждён: recovery допущено&#x27;, &#x27;Успешный ответ etcd содержит ожидаемые key/value. Проверка владения и следующий вызов Nova/Ironic не составляют одну атомарную транзакцию.&#x27;,
+          { coordination: { hostView: &#x27;UUID подтверждён&#x27;, check: &#x27;host: OK&#x27; }, knowledge: { owner: &#x27;C0&#x27; }, guards: { owner: true }, protocol: { phase: &#x27;RECOVERY_ADMITTED&#x27; } },
+          signal(&#x27;etcd&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;host UUID: OK&#x27;, false, [&#x27;tooz&#x27;, &#x27;powerops&#x27;]));
+        add(&#x27;T06&#x27;, &#x27;Отправлен Nova disable&#x27;, &#x27;Запрет размещения запрошен. Фактическое исполнение v0 продолжается.&#x27;,
+          { protocol: { phase: &#x27;DISABLE_PENDING&#x27; } }, signal(&#x27;controller&#x27;, &#x27;nova&#x27;, &#x27;command&#x27;, &#x27;disable Hsrc&#x27;));
+        add(&#x27;T06 · return&#x27;, &#x27;Disable-вызов завершился без ошибки&#x27;, &#x27;Архивный путь завершает вызов disable и паузу, без отдельного readback disabled/up. Это слабее T07 модели; состояние disabled/down будет проверено после fencing.&#x27;,
+          { knowledge: { nova: &#x27;disable: принят&#x27; }, protocol: { phase: &#x27;DISABLE_RETURNED&#x27; } },
+          signal(&#x27;nova&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;disable: вызов завершён&#x27;));
+        add(&#x27;K05&#x27;, &#x27;Фоновый heartbeat Tooz&#x27;, &#x27;Heartbeat поддерживает координацию в фоне, пока coordinator запущен. Его наличие само по себе не доказывает владение lock; это не новая UUID-проверка.&#x27;,
+          {}, signal(&#x27;tooz&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;heartbeat&#x27;));
+        add(&#x27;K06&#x27;, &#x27;Перед fencing владение перепроверено&#x27;, &#x27;PowerOps вызывает assert_healthy перед fencing и через callback при ожидании стабильного Off. Здесь успешные повторные проверки укрупнены в один кадр.&#x27;,
+          { coordination: { check: &#x27;host: OK&#x27; } }, signal(&#x27;etcd&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;Повторный UUID-check: OK&#x27;, false, [&#x27;tooz&#x27;, &#x27;powerops&#x27;]));
+        add(&#x27;T08&#x27;, &#x27;Отправлен power-off&#x27;, &#x27;Ironic/BMC получает запрос для точного источника. Исход команды пока неизвестен контроллеру.&#x27;,
+          { protocol: { phase: &#x27;FENCE_PENDING&#x27; }, operations: { fence: &#x27;SENT_UNKNOWN&#x27; }, commandCount: { fence: 1 }, guards: { reconciled: false } },
+          signal(&#x27;controller&#x27;, &#x27;ironic&#x27;, &#x27;command&#x27;, &#x27;power-off Hsrc&#x27;));
+        add(&#x27;T09&#x27;, &#x27;Источник физически выключен&#x27;, &#x27;v0 остановлен в фактическом мире. Фаза остаётся FENCE_PENDING, подтверждения Off ещё нет.&#x27;,
+          { world: { sourcePower: &#x27;off&#x27;, sourceVM: &#x27;stopped&#x27; } }, signal(&#x27;ironic&#x27;, &#x27;source&#x27;, &#x27;effect&#x27;, &#x27;Питание OFF&#x27;));
+        if (mode === &#x27;lost&#x27;) {
+          add(&#x27;LOSS&#x27;, &#x27;Допустимое подтверждение Off не получено&#x27;, &#x27;Источник уже выключен, но readback не дал нужного стабильного evidence до дедлайна. Одно потерянное сообщение само по себе ещё не означает завершение polling.&#x27;,
+            {}, signal(&#x27;ironic&#x27;, &#x27;controller&#x27;, &#x27;loss&#x27;, &#x27;Ответ потерян&#x27;, true));
+          add(&#x27;U01&#x27;, &#x27;Тайм-аут: попытка auto recovery завершена ошибкой&#x27;, &#x27;Исход power-off остаётся неизвестным контроллеру. BLOCKED — обозначение модели; архивный flow завершается ошибкой, без автоматического U02 resume или power-on.&#x27;,
+            { protocol: { blocked: true } }, signal(&#x27;controller&#x27;, &#x27;controller&#x27;, &#x27;loss&#x27;, &#x27;Timeout&#x27;));
+          releaseHost();
+          return finish(&#x27;C03&#x27;);
+        }
+        add(&#x27;T10&#x27;, &#x27;Получено допустимое подтверждение Off&#x27;, &#x27;Последовательные readback и корреляция приняты по допущениям модели. Источник остаётся в карантине.&#x27;,
+          { knowledge: { power: &#x27;off&#x27; }, protocol: { phase: &#x27;SOURCE_ISOLATED&#x27;, blocked: false, quarantine: true }, guards: { off: true, reconciled: true }, operations: { fence: &#x27;CONFIRMED&#x27; } },
+          signal(&#x27;ironic&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;Off evidence&#x27;));
+        add(&#x27;T11&#x27;, &#x27;Запрошено состояние Nova service&#x27;, &#x27;Одного Off evidence недостаточно: контроллер отдельно проверяет disabled/down.&#x27;,
+          {}, signal(&#x27;controller&#x27;, &#x27;nova&#x27;, &#x27;command&#x27;, &#x27;Чтение service&#x27;));
+        add(&#x27;T11&#x27;, &#x27;Nova подтвердила disabled/down&#x27;, &#x27;Теперь подтверждены изоляция и состояние сервиса. Глобальный evacuation lock ещё предстоит получить; резерв Hdst задан допущением модели.&#x27;,
+          { knowledge: { nova: &#x27;disabled / down&#x27; }, protocol: { phase: &#x27;SOURCE_DOWN_CONFIRMED&#x27; }, guards: { nova: true } },
+          signal(&#x27;nova&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;disabled / down&#x27;));
+        add(&#x27;K07&#x27;, &#x27;Перед ВМ приобретается global evacuation lock&#x27;, &#x27;powerops/evacuation/global сериализует участвующие recovery в общем backend/namespace. Это не reservation Hdst и не per-target guard; совместимость и резерв Hdst заданы A03/A06.&#x27;,
+          { locks: { global: &#x27;C0&#x27; }, coordination: { globalView: &#x27;ожидает UUID-check&#x27; } },
+          signal(&#x27;powerops&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;acquire global lock&#x27;, false, [&#x27;tooz&#x27;]));
+        add(&#x27;K08&#x27;, &#x27;Проверены UUID обеих блокировок&#x27;, &#x27;assert_healthy проверяет каждый active lock: host и global. Nova VM lock/reset/evacuate и выбранные проверки результата также защищены вызовами assert_healthy.&#x27;,
+          { coordination: { globalView: &#x27;UUID подтверждён&#x27;, check: &#x27;host + global: OK&#x27; }, guards: { global: true } },
+          signal(&#x27;etcd&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;host + global UUID: OK&#x27;, false, [&#x27;tooz&#x27;, &#x27;powerops&#x27;]));
+        add(&#x27;T12&#x27;, &#x27;Отправлена evacuation&#x27;, &#x27;В методе auto target не передаётся: назначение выбирает Nova. В этой трассе им станет Hdst. Приём запроса ещё не означает восстановления ВМ.&#x27;,
+          { protocol: { phase: &#x27;EVAC_PENDING&#x27; }, operations: { evacuate: &#x27;SENT_UNKNOWN&#x27; }, commandCount: { evacuate: 1 } },
+          signal(&#x27;controller&#x27;, &#x27;nova&#x27;, &#x27;command&#x27;, &#x27;evacuate V · выбор Nova&#x27;));
+        add(&#x27;T13&#x27;, &#x27;На Hdst восстановлен и запущен v1&#x27;, &#x27;Профиль архивной ветки для исходно ACTIVE ВМ: evacuation возвращает её в ACTIVE. Отдельного start здесь нет; наблюдение C0 пока указывает Hsrc.&#x27;,
+          { world: { targetVM: &#x27;running&#x27; } }, signal(&#x27;nova&#x27;, &#x27;target&#x27;, &#x27;effect&#x27;, &#x27;v1 работает&#x27;));
+        add(&#x27;T14&#x27;, &#x27;Nova подтвердила результат evacuation&#x27;, &#x27;Новый host отличается от источника, task_state=None, vm_state=active. Polling, финальная сверка и VM unlock укрупнены; host и global locks всё ещё удерживаются.&#x27;,
+          { knowledge: { vmHost: &#x27;Hdst&#x27;, vmState: &#x27;ACTIVE&#x27; }, operations: { evacuate: &#x27;CONFIRMED&#x27; } },
+          signal(&#x27;nova&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;Hdst · ACTIVE · task=None&#x27;));
+        add(&#x27;K09&#x27;, &#x27;После evacuation владение перепроверено&#x27;, &#x27;Перед evacuation_interval PowerOps вновь проверяет heartbeat thread и UUID обоих удерживаемых locks.&#x27;,
+          {}, signal(&#x27;etcd&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;host + global UUID: OK&#x27;, false, [&#x27;tooz&#x27;, &#x27;powerops&#x27;]));
+        add(&#x27;K10&#x27;, &#x27;evacuation_interval — global lock ещё занят&#x27;, &#x27;Пауза находится внутри контекста global lock. В этой успешной трассе владение сохраняется: другая эвакуация ждёт освобождения. Heartbeat продолжает работать; потеря lease — отдельный сценарий.&#x27;,
+          { coordination: { interval: true } }, signal(&#x27;controller&#x27;, &#x27;controller&#x27;, &#x27;command&#x27;, &#x27;evacuation_interval&#x27;));
+        add(&#x27;K11&#x27;, &#x27;Интервал окончен: release global lock&#x27;, &#x27;Host lock продолжает охватывать recovery источника. Для следующей ВМ global lock нужно было бы приобрести заново.&#x27;,
+          { coordination: { interval: false } }, signal(&#x27;powerops&#x27;, &#x27;etcd&#x27;, &#x27;command&#x27;, &#x27;release global lock&#x27;, false, [&#x27;tooz&#x27;]));
+        add(&#x27;K12&#x27;, &#x27;Освобождение global lock подтверждено&#x27;, &#x27;В этой трассе release успешен. Доступ к глобальной очереди освобождён; это не сигнал включить исходный хост.&#x27;,
+          { locks: { global: &#x27;free&#x27; }, coordination: { globalView: &#x27;освобождён&#x27;, check: &#x27;host: OK&#x27; }, guards: { global: false } },
+          signal(&#x27;etcd&#x27;, &#x27;powerops&#x27;, &#x27;observation&#x27;, &#x27;release = True&#x27;, false, [&#x27;tooz&#x27;]));
+        add(&#x27;T18&#x27;, &#x27;Объявлено восстановление исполнения ВМ&#x27;, &#x27;Единственный работающий экземпляр — v1 на Hdst; Hsrc остаётся выключенным и в карантине. Готовность приложения здесь не проверяется.&#x27;,
+          { protocol: { phase: &#x27;VM_RECOVERED&#x27; } }, signal(&#x27;controller&#x27;, &#x27;controller&#x27;, &#x27;observation&#x27;, &#x27;VM_RECOVERED&#x27;));
+        releaseHost();
+        return finish(&#x27;C02&#x27;);
+      }
+      const traces = { normal: buildTrace(&#x27;normal&#x27;), lost: buildTrace(&#x27;lost&#x27;), hold: buildTrace(&#x27;hold&#x27;) };
+      // TRACE DATA END
+
+      const root = document.getElementById(&#x27;ha-recovery-animation&#x27;);
+      const q = selector =&gt; root.querySelector(selector);
+      const svg = q(&#x27;.ha-scene&#x27;);
+      const ns = &#x27;http://www.w3.org/2000/svg&#x27;;
+      const reducedMotion = matchMedia(&#x27;(prefers-reduced-motion: reduce)&#x27;);
+      const colors = { command: &#x27;var(--viz-series-1)&#x27;, observation: &#x27;var(--viz-series-2)&#x27;, effect: &#x27;var(--viz-series-3)&#x27;, loss: &#x27;var(--viz-series-4)&#x27; };
+      let mode = &#x27;normal&#x27;, index = 0, progress = 0, playing = false, speed = 1, raf = null, lastTime = null;
+      let positions = {}, packet = null, activePath = null, packetLength = 0;
+      let sceneWidth = 0;
+      const current = () =&gt; traces[mode].frames[index];
+      const next = () =&gt; traces[mode].frames[index + 1];
+      const make = (name, attrs = {}, text, parent = svg) =&gt; {
+        const element = document.createElementNS(ns, name);
+        Object.entries(attrs).forEach(([key, value]) =&gt; element.setAttribute(key, String(value)));
+        if (text !== undefined) element.textContent = text;
+        parent.appendChild(element);
+        return element;
+      };
+      function text(x, y, value, cls = &#x27;&#x27;, parent = svg) {
+        return make(&#x27;text&#x27;, { x, y, class: cls }, value, parent);
+      }
+      function route(from, to) {
+        const a = positions[from], b = positions[to];
+        if (from === to) return `M ${a.x + a.w / 2 - 14} ${a.y - 10} L ${a.x + a.w / 2 + 14} ${a.y - 10}`;
+        if (sceneWidth &lt; 680 &amp;&amp; [from, to].includes(&#x27;controller&#x27;) &amp;&amp; [from, to].some(id =&gt; id === &#x27;ironic&#x27; || id === &#x27;nova&#x27;)) {
+          const externalId = from === &#x27;controller&#x27; ? to : from;
+          const controller = positions.controller, external = positions[externalId];
+          const left = externalId === &#x27;ironic&#x27;;
+          const side = left ? 10 : sceneWidth - 12;
+          const points = [[left ? controller.x : controller.x + controller.w, controller.y + controller.h / 2], [side, controller.y + controller.h / 2], [side, external.y - 18], [external.x + external.w / 2, external.y - 18], [external.x + external.w / 2, external.y]];
+          if (from !== &#x27;controller&#x27;) points.reverse();
+          return points.map(([x, y], i) =&gt; `${i ? &#x27;L&#x27; : &#x27;M&#x27;} ${x} ${y}`).join(&#x27; &#x27;);
+        }
+        if (sceneWidth &lt; 680 &amp;&amp; [from, to].includes(&#x27;tooz&#x27;) &amp;&amp; [from, to].includes(&#x27;etcd&#x27;)) {
+          const side = sceneWidth - 5;
+          return `M ${a.x + a.w} ${a.y + a.h / 2} L ${side} ${a.y + a.h / 2} L ${side} ${b.y + b.h / 2} L ${b.x + b.w} ${b.y + b.h / 2}`;
+        }
+        if ((from === &#x27;source&#x27; &amp;&amp; to === &#x27;detector&#x27;) || (to === &#x27;source&#x27; &amp;&amp; from === &#x27;detector&#x27;)) {
+          return `M ${a.x} ${a.y + a.h / 2} C 3 ${a.y + a.h / 2}, 3 ${b.y + b.h / 2}, ${b.x} ${b.y + b.h / 2}`;
+        }
+        const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
+        const bx = b.x + b.w / 2, by = b.y + b.h / 2;
+        if (Math.abs(by - ay) &gt; Math.abs(bx - ax) * 0.7) {
+          const y1 = by &gt; ay ? a.y + a.h : a.y;
+          const y2 = by &gt; ay ? b.y : b.y + b.h;
+          const mid = (y1 + y2) / 2;
+          return `M ${ax} ${y1} C ${ax} ${mid}, ${bx} ${mid}, ${bx} ${y2}`;
+        }
+        const x1 = bx &gt; ax ? a.x + a.w : a.x;
+        const x2 = bx &gt; ax ? b.x : b.x + b.w;
+        const mid = (x1 + x2) / 2;
+        return `M ${x1} ${ay} C ${mid} ${ay}, ${mid} ${by}, ${x2} ${by}`;
+      }
+      function node(id, title, lines, fill = &#x27;var(--muted)&#x27;) {
+        const p = positions[id];
+        const group = make(&#x27;g&#x27;, { &#x27;data-node&#x27;: id });
+        make(&#x27;rect&#x27;, { x: p.x, y: p.y, width: p.w, height: p.h, rx: 7, fill, stroke: &#x27;var(--border)&#x27;, &#x27;stroke-width&#x27;: 1 }, undefined, group);
+        text(p.x + 12, p.y + 23, title, &#x27;ha-node-title&#x27;, group);
+        lines.forEach((line, i) =&gt; text(p.x + 12, p.y + 45 + i * 19, line, i === 0 ? &#x27;&#x27; : &#x27;ha-secondary&#x27;, group));
+      }
+      function drawScene() {
+        const s = current().state;
+        sceneWidth = Math.max(280, Math.floor(root.getBoundingClientRect().width));
+        const narrow = sceneWidth &lt; 680;
+        const margin = 18, gap = narrow ? 18 : 24;
+        const col = (sceneWidth - margin * 2 - gap * (narrow ? 1 : 2)) / (narrow ? 2 : 3);
+        const right = sceneWidth - margin - col;
+        const middle = margin + col + gap;
+        const executiveY = narrow ? 470 : 314;
+        const worldY = narrow ? 632 : 475;
+        positions = {
+          detector: { x: margin, y: narrow ? 30 : 48, w: col, h: 87 },
+          controller: { x: narrow ? margin : middle, y: narrow ? 176 : 48, w: narrow ? sceneWidth - 36 : col, h: 91 },
+          powerops: { x: narrow ? margin : right, y: narrow ? 310 : 48, w: col, h: 91 },
+          tooz: { x: right, y: narrow ? 310 : 172, w: col, h: 91 },
+          etcd: { x: right, y: narrow ? 30 : executiveY, w: col, h: 91 },
+          ironic: { x: margin, y: executiveY, w: col, h: 91 },
+          nova: { x: narrow ? right : middle, y: executiveY, w: col, h: 91 },
+          source: { x: margin, y: worldY, w: col, h: 108 },
+          target: { x: narrow ? right : middle, y: worldY, w: col, h: 108 }
+        };
+        svg.replaceChildren();
+        svg.setAttribute(&#x27;viewBox&#x27;, `0 0 ${sceneWidth} ${worldY + 126}`);
+        svg.setAttribute(&#x27;height&#x27;, worldY + 126);
+        const title = `${current().id}: ${current().title}. Источник ${s.world.sourcePower === &#x27;on&#x27; ? &#x27;включён&#x27; : &#x27;выключен&#x27;}. Знание Off: ${s.knowledge.power}. Фаза ${s.protocol.phase}${s.protocol.blocked ? &#x27;, BLOCKED&#x27; : &#x27;&#x27;}.`;
+        svg.setAttribute(&#x27;aria-label&#x27;, title);
+        make(&#x27;title&#x27;, {}, title);
+        make(&#x27;desc&#x27;, {}, current().detail);
+        const processX = narrow ? 10 : middle - 8;
+        const processY = narrow ? 140 : 8;
+        const processW = narrow ? sceneWidth - 20 : sceneWidth - processX - 10;
+        make(&#x27;rect&#x27;, { x: processX, y: processY, width: processW, height: narrow ? 280 : 270, rx: 8, fill: &#x27;none&#x27;, stroke: &#x27;var(--border)&#x27;, &#x27;stroke-width&#x27;: 1 });
+        text(processX + 8, processY + 20, &#x27;Masakari engine · один процесс&#x27;, &#x27;ha-node-title&#x27;);
+        const edges = [[&#x27;source&#x27;, &#x27;detector&#x27;], [&#x27;detector&#x27;, &#x27;controller&#x27;], [&#x27;controller&#x27;, &#x27;powerops&#x27;], [&#x27;powerops&#x27;, &#x27;tooz&#x27;], [&#x27;tooz&#x27;, &#x27;etcd&#x27;], [&#x27;controller&#x27;, &#x27;ironic&#x27;], [&#x27;controller&#x27;, &#x27;nova&#x27;], [&#x27;ironic&#x27;, &#x27;source&#x27;], [&#x27;nova&#x27;, &#x27;target&#x27;]];
+        edges.forEach(([from, to]) =&gt; {
+          const broken = from === &#x27;source&#x27; &amp;&amp; s.world.management === &#x27;down&#x27;;
+          make(&#x27;path&#x27;, { d: route(from, to), fill: &#x27;none&#x27;, stroke: broken ? colors.loss : &#x27;var(--border)&#x27;, &#x27;stroke-width&#x27;: 1.2, &#x27;stroke-dasharray&#x27;: broken ? &#x27;3 6&#x27; : &#x27;none&#x27; });
+        });
+        text(margin, worldY - 16, &#x27;Фактический мир&#x27;, &#x27;ha-secondary&#x27;);
+        const running = [s.world.sourceVM === &#x27;running&#x27; ? &#x27;v0&#x27; : null, s.world.targetVM === &#x27;running&#x27; ? &#x27;v1&#x27; : null].filter(Boolean);
+        if (!narrow) text(sceneWidth / 2, worldY - 16, `Исполняются: ${running.length ? running.join(&#x27;, &#x27;) : &#x27;нет&#x27;}`, &#x27;ha-secondary&#x27;);
+        node(&#x27;detector&#x27;, col &lt; 140 ? &#x27;Consul / D&#x27; : &#x27;Consul / monitor&#x27;, [s.knowledge.networks, &#x27;Сети · readback&#x27;]);
+        node(&#x27;controller&#x27;, &#x27;Recovery · C0&#x27;, [s.protocol.phase, s.protocol.blocked ? &#x27;BLOCKED · исход неизвестен&#x27; : &#x27;Управление восстановлением&#x27;], s.protocol.blocked ? &#x27;color-mix(in srgb, var(--viz-series-4) 10%, transparent)&#x27; : &#x27;var(--muted)&#x27;);
+        node(&#x27;powerops&#x27;, &#x27;PowerOps&#x27;, [&#x27;Coordinator&#x27;, `H: ${s.guards.owner ? &#x27;✓&#x27; : &#x27;—&#x27;}   G: ${s.guards.global ? &#x27;✓&#x27; : &#x27;—&#x27;}`]);
+        node(&#x27;tooz&#x27;, col &lt; 140 ? &#x27;Tooz&#x27; : &#x27;Tooz · библиотека&#x27;, [&#x27;etcd3gw client&#x27;, s.coordination.heartbeat ? &#x27;HB: в фоне&#x27; : &#x27;HB: выкл.&#x27;]);
+        node(&#x27;etcd&#x27;, col &lt; 140 ? &#x27;etcd&#x27; : &#x27;etcd · backend&#x27;, [`H: ${s.locks.host === &#x27;C0&#x27; ? &#x27;занят C0&#x27; : &#x27;свободен&#x27;}`, `G: ${s.locks.global === &#x27;C0&#x27; ? &#x27;занят C0&#x27; : &#x27;свободен&#x27;}`]);
+        node(&#x27;ironic&#x27;, &#x27;Ironic / BMC&#x27;, [s.knowledge.power === &#x27;off&#x27; ? &#x27;Off: да&#x27; : &#x27;Off: неизвестно&#x27;, `power-off: ${s.commandCount.fence}`]);
+        node(&#x27;nova&#x27;, &#x27;Nova · readback&#x27;, [s.knowledge.nova, `${s.knowledge.vmHost} · ${s.knowledge.vmState}`]);
+        node(&#x27;source&#x27;, col &lt; 140 ? &#x27;Hsrc&#x27; : &#x27;Hsrc · источник&#x27;, [s.world.sourcePower === &#x27;on&#x27; ? &#x27;Питание ON&#x27; : &#x27;Питание OFF&#x27;, s.world.sourceVM === &#x27;running&#x27; ? &#x27;v0 · работает&#x27; : &#x27;v0 · остановлен&#x27;, s.protocol.blocked ? &#x27;Возврат: нет&#x27; : `Карантин: ${s.protocol.quarantine ? &#x27;да&#x27; : &#x27;нет&#x27;}`], s.world.sourceVM === &#x27;running&#x27; ? &#x27;color-mix(in srgb, var(--viz-series-3) 10%, transparent)&#x27; : &#x27;var(--muted)&#x27;);
+        const targetVM = s.world.targetVM === &#x27;absent&#x27; ? &#x27;Нет ВМ&#x27; : s.world.targetVM === &#x27;running&#x27; ? &#x27;v1 · работает&#x27; : &#x27;v1 · остановлен&#x27;;
+        node(&#x27;target&#x27;, col &lt; 130 ? &#x27;Hdst · цель&#x27; : &#x27;Hdst · назначение&#x27;, [&#x27;Питание ON&#x27;, targetVM, &#x27;Данные: да&#x27;], s.world.targetVM === &#x27;running&#x27; ? &#x27;color-mix(in srgb, var(--viz-series-3) 10%, transparent)&#x27; : &#x27;var(--muted)&#x27;);
+        const upcoming = next();
+        activePath = null; packet = null; packetLength = 0;
+        if (upcoming?.signal) {
+          const m = upcoming.signal;
+          const hops = [m.from, ...m.via, m.to];
+          const path = hops.slice(1).map((to, i) =&gt; route(hops[i], to)).join(&#x27; &#x27;);
+          activePath = make(&#x27;path&#x27;, { d: path, fill: &#x27;none&#x27;, stroke: colors[m.kind], &#x27;stroke-width&#x27;: 2, &#x27;stroke-dasharray&#x27;: m.kind === &#x27;observation&#x27; ? &#x27;5 4&#x27; : &#x27;none&#x27;, visibility: &#x27;hidden&#x27; });
+          packet = make(&#x27;circle&#x27;, { r: 5, fill: colors[m.kind], visibility: &#x27;hidden&#x27; });
+          packetLength = activePath.getTotalLength();
+        }
+        drawPacket();
+      }
+      function drawPacket() {
+        if (!packet || !activePath) return;
+        const visible = progress &gt; 0;
+        activePath.setAttribute(&#x27;visibility&#x27;, visible ? &#x27;visible&#x27; : &#x27;hidden&#x27;);
+        const m = next().signal;
+        const t = reducedMotion.matches ? 0.5 : progress;
+        const distance = m.lost ? Math.min(t, 0.55) : t;
+        const p = activePath.getPointAtLength(packetLength * distance);
+        packet.setAttribute(&#x27;cx&#x27;, p.x);
+        packet.setAttribute(&#x27;cy&#x27;, p.y);
+        packet.setAttribute(&#x27;visibility&#x27;, visible &amp;&amp; !(m.lost &amp;&amp; progress &gt; 0.72) ? &#x27;visible&#x27; : &#x27;hidden&#x27;);
+        packet.setAttribute(&#x27;r&#x27;, m.from === m.to &amp;&amp; !reducedMotion.matches ? 4 + 3 * Math.sin(Math.PI * progress) : 5);
+      }
+      function renderUI() {
+        const frames = traces[mode].frames;
+        const frame = current(), s = frame.state;
+        q(&#x27;[data-count]&#x27;).textContent = `${index + 1} / ${frames.length}`;
+        q(&#x27;[data-position]&#x27;).max = frames.length - 1;
+        q(&#x27;[data-position]&#x27;).value = index;
+        q(&#x27;[data-position]&#x27;).setAttribute(&#x27;aria-valuetext&#x27;, `${index + 1}: ${frame.id}, ${frame.title}`);
+        q(&#x27;[data-title]&#x27;).textContent = `${frame.id} · ${frame.title}`;
+        q(&#x27;[data-detail]&#x27;).textContent = frame.detail;
+        q(&#x27;[data-prev]&#x27;).disabled = index === 0 &amp;&amp; progress === 0;
+        q(&#x27;[data-next]&#x27;).disabled = index === frames.length - 1;
+        q(&#x27;[data-play]&#x27;).textContent = playing ? &#x27;Пауза&#x27; : index === frames.length - 1 ? &#x27;Повторить&#x27; : &#x27;Воспроизвести&#x27;;
+        q(&#x27;[data-play]&#x27;).setAttribute(&#x27;aria-pressed&#x27;, String(playing));
+        q(&#x27;[data-motion]&#x27;).textContent = progress &gt; 0 || playing ? ` → ${next()?.signal?.label || next()?.title || &#x27;&#x27;}${playing ? &#x27;&#x27; : &#x27; · пауза&#x27;}` : &#x27;&#x27;;
+        q(&#x27;[data-profile]&#x27;).textContent = mode === &#x27;hold&#x27; ? &#x27;P0: all_down по трём сетям.&#x27; : &#x27;P1: recovery разрешено исследовательской политикой.&#x27;;
+        q(&#x27;[data-contract]&#x27;).textContent = mode === &#x27;hold&#x27; ? &#x27;При down/up/up ВМ продолжает работать.&#x27; : &#x27;PowerOps включён · auto recovery · ACTIVE → ACTIVE.&#x27;;
+        for (const key of [&#x27;host&#x27;, &#x27;global&#x27;]) {
+          const actual = s.locks[key] === &#x27;C0&#x27; ? &#x27;занят C0&#x27; : &#x27;свободен&#x27;;
+          q(`[data-lock-${key}]`).textContent = `etcd: ${actual} · C0: ${s.coordination[key + &#x27;View&#x27;]}${key === &#x27;global&#x27; &amp;&amp; s.coordination.interval ? &#x27; · удерживается на evacuation_interval&#x27; : &#x27;&#x27;}`;
+        }
+        const allGuards = Object.values(s.guards).every(Boolean);
+        const canSend = allGuards &amp;&amp; !s.protocol.blocked &amp;&amp; s.protocol.phase === &#x27;SOURCE_DOWN_CONFIRMED&#x27; &amp;&amp; s.operations.evacuate === &#x27;NOT_SENT&#x27;;
+        let gate = &#x27;Допуск evacuation: основания ещё не собраны&#x27;;
+        if (canSend) gate = &#x27;Evacuation разрешена: основания модели + global lock&#x27;;
+        else if (s.protocol.blocked) gate = &#x27;Допуск evacuation: запрещён до разрешения исхода&#x27;;
+        else if (s.operations.evacuate !== &#x27;NOT_SENT&#x27;) gate = &#x27;Evacuation уже отправлена; повторный допуск не выдаётся&#x27;;
+        else if (mode === &#x27;hold&#x27;) gate = &#x27;Допуск evacuation: политика не разрешает recovery&#x27;;
+        q(&#x27;[data-gate]&#x27;).textContent = gate;
+        q(&#x27;[data-guards]&#x27;).replaceChildren(...Object.entries(guardLabels).map(([key, label]) =&gt; {
+          const item = document.createElement(&#x27;li&#x27;);
+          const mark = document.createElement(&#x27;span&#x27;);
+          mark.className = &#x27;ha-guard-mark&#x27;;
+          mark.setAttribute(&#x27;aria-hidden&#x27;, &#x27;true&#x27;);
+          mark.textContent = s.guards[key] ? &#x27;✓&#x27; : &#x27;—&#x27;;
+          const text = document.createElement(&#x27;span&#x27;); text.textContent = label;
+          item.setAttribute(&#x27;aria-label&#x27;, `${label}: ${s.guards[key] ? &#x27;подтверждено&#x27; : &#x27;не подтверждено&#x27;}`);
+          item.append(mark, text); return item;
+        }));
+      }
+      function render() { renderUI(); drawScene(); }
+      function stop() {
+        playing = false;
+        if (raf !== null) cancelAnimationFrame(raf);
+        raf = null; lastTime = null;
+      }
+      function seek(position) {
+        stop(); index = Math.max(0, Math.min(traces[mode].frames.length - 1, position)); progress = 0; render();
+      }
+      function tick(now) {
+        if (!playing) return;
+        if (lastTime !== null) progress += Math.min(now - lastTime, 120) / (1800 / speed);
+        lastTime = now;
+        if (progress &gt;= 1) {
+          index += 1; progress = 0;
+          if (index === traces[mode].frames.length - 1) stop();
+          render();
+        } else drawPacket();
+        if (playing) raf = requestAnimationFrame(tick);
+      }
+      q(&#x27;[data-play]&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+        if (playing) { stop(); renderUI(); return; }
+        if (index === traces[mode].frames.length - 1) { index = 0; progress = 0; }
+        playing = true; lastTime = null; render(); raf = requestAnimationFrame(tick);
+      });
+      q(&#x27;[data-prev]&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; seek(progress &gt; 0 ? index : index - 1));
+      q(&#x27;[data-next]&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; seek(index + 1));
+      q(&#x27;[data-reset]&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; seek(0));
+      q(&#x27;[data-position]&#x27;).addEventListener(&#x27;input&#x27;, event =&gt; seek(Number(event.target.value)));
+      q(&#x27;[data-speed]&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; { speed = Number(event.target.value); });
+      q(&#x27;[data-scenario]&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; { mode = event.target.value; seek(0); });
+      document.addEventListener(&#x27;visibilitychange&#x27;, () =&gt; {
+        if (document.hidden &amp;&amp; playing) { stop(); renderUI(); }
+      });
+      reducedMotion.addEventListener(&#x27;change&#x27;, drawPacket);
+      new ResizeObserver(() =&gt; {
+        const width = Math.max(280, Math.floor(root.getBoundingClientRect().width));
+        if (width !== sceneWidth) drawScene();
+      }).observe(root);
+      render();
+    })();
+  &lt;/script&gt;
+&lt;/div&gt;
+
+
+
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>

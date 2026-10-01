@@ -1,0 +1,13 @@
+# Source archives stay local; research notes retain their checksums.
+*.[zZ][iI][pP]
+*.[7][zZ]
+*.[rR][aA][rR]
+*.[tT][aA][rR]
+*.[gG][zZ]
+*.[bB][zZ]2
+*.[xX][zZ]
+*.[zZ][sS][tT]
+*.[tT][gG][zZ]
+
+# Local macOS metadata.
+.DS_Store

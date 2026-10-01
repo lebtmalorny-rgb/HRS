@@ -1,0 +1,149 @@
+<div id="ha-fencing-trace">
+  <style>
+    #ha-fencing-trace .ha-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+    #ha-fencing-trace .ha-stage { margin: 12px 0 8px; }
+    #ha-fencing-trace .ha-diagram { display: block; width: 100%; }
+    #ha-fencing-trace .ha-diagram text { fill: var(--foreground); font-size: 12px; font-weight: 400; }
+    #ha-fencing-trace .ha-diagram .lane-label { fill: var(--muted-foreground); }
+    #ha-fencing-trace .ha-detail { margin-top: 8px; min-height: 2em; }
+  </style>
+  <div class="ha-heading">
+    <h3>C03 · Потерян ответ на power-off</h3>
+    <span class="text-small text-muted">SC-01 · P1 · иллюстрация</span>
+  </div>
+  <div class="viz-controls">
+    <button class="btn" type="button" data-back>Предыдущий кадр</button>
+    <span class="tabular-nums" data-counter>5 / 7</span>
+    <button class="btn" type="button" data-next>Следующий кадр</button>
+  </div>
+  <div class="ha-stage" aria-live="polite" aria-atomic="true">
+    <span data-event>U01 · Истёк тайм-аут</span>
+  </div>
+  <svg class="ha-diagram" role="img" aria-label="Источник выключен, исход команды неизвестен контроллеру; evacuation запрещена."></svg>
+  <div class="ha-detail text-small" data-detail>Ответ потерян; ошибка ожидания не отменяет выполненное выключение.</div>
+  <div class="text-small text-muted">Кадры показывают порядок событий; длительности не заданы.</div>
+  <script>
+    (() => {
+      const root = document.getElementById('ha-fencing-trace');
+      const svg = root.querySelector('.ha-diagram');
+      const frames = [
+        {
+          event: 'T01–T02 · Потеря management-связи',
+          source: 'Включён', vm: 'v0 работает', powered: true,
+          observed: 'Сети: down / up / up', nova: 'Nova: enabled / up',
+          phase: 'SUSPECTED', action: 'P1: рассмотреть допуск recovery',
+          detail: 'Источник жив; в этой иллюстрации выбрана разрешающая политика P1.',
+          alt: 'Исходная ВМ работает. Детектор наблюдает down/up/up. Профиль P1 разрешает рассмотреть recovery.'
+        },
+        {
+          event: 'T05–T07 · Допуск и подтверждение disable',
+          source: 'Включён', vm: 'v0 работает', powered: true,
+          observed: 'Владение подтверждено', nova: 'Nova: disabled / up',
+          phase: 'SOURCE_DISABLED', action: 'Fencing: при выполнении T08',
+          detail: 'Административный disable не останавливает исходную ВМ.',
+          alt: 'Исходная ВМ всё ещё работает. Nova disabled/up. При выполнении условий T08 можно запросить fencing.'
+        },
+        {
+          event: 'T08 · Power-off отправлен',
+          source: 'Включён', vm: 'v0 работает', powered: true,
+          observed: 'Off ещё не подтверждён', nova: 'Nova: disabled / up',
+          phase: 'FENCE_PENDING', action: 'Evacuation запрещена',
+          detail: 'Запрос отправлен; в этом кадре физическое выключение ещё не произошло.',
+          alt: 'Power-off отправлен, источник пока включён. Контроллер ждёт подтверждения. Evacuation запрещена.'
+        },
+        {
+          event: 'T09 · BMC выполнил power-off',
+          source: 'Выключен', vm: 'v0 остановлен', powered: false,
+          observed: 'Off ещё не подтверждён', nova: 'Nova: disabled / up',
+          phase: 'FENCE_PENDING', action: 'Evacuation запрещена',
+          detail: 'Мир изменился; контроллер пока не получил подтверждения.',
+          alt: 'Источник фактически выключен и ВМ остановлена. Контроллер ещё не знает результата. Evacuation запрещена.'
+        },
+        {
+          event: 'U01 · Истёк тайм-аут',
+          source: 'Выключен', vm: 'v0 остановлен', powered: false,
+          observed: 'Исход команды: UNKNOWN', nova: 'Nova: disabled / up',
+          phase: 'BLOCKED · FENCE_PENDING', action: 'Только сверка; evacuation запрещена',
+          detail: 'Ответ потерян; ошибка ожидания не отменяет выполненное выключение.',
+          alt: 'Источник выключен. Исход power-off неизвестен контроллеру. BLOCKED сохраняет фазу FENCE_PENDING; допустима сверка, evacuation запрещена.'
+        },
+        {
+          event: 'U02 / T10 · Достоверная сверка Off',
+          source: 'Выключен', vm: 'v0 остановлен', powered: false,
+          observed: 'Off подтверждён; карантин', nova: 'Nova: disabled / up',
+          phase: 'SOURCE_ISOLATED', action: 'Ожидать Nova disabled / down',
+          detail: 'Исход команды разрешён, владение перепроверено; одного Off ещё недостаточно.',
+          alt: 'Источник выключен. Получено допустимое подтверждение Off, установлен карантин. Nova пока disabled/up, evacuation ещё запрещена.'
+        },
+        {
+          event: 'T11 · Nova подтвердила disabled/down',
+          source: 'Выключен', vm: 'v0 остановлен', powered: false,
+          observed: 'Off актуален; карантин', nova: 'Nova: disabled / down',
+          phase: 'SOURCE_DOWN_CONFIRMED', action: 'T12: допуск при всех условиях',
+          detail: 'Далее возможна evacuation; восстановление ВМ ещё не произошло.',
+          alt: 'Источник выключен, Off подтверждён, Nova disabled/down. При всех условиях допуска можно отправить evacuation. ВМ ещё не восстановлена.'
+        }
+      ];
+      let index = 4;
+      const ns = 'http://www.w3.org/2000/svg';
+      function node(name, attrs, text) {
+        const n = document.createElementNS(ns, name);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+        if (text !== undefined) n.textContent = text;
+        svg.appendChild(n);
+        return n;
+      }
+      function label(x, y, text, cls = '') {
+        return node('text', { x, y, class: cls }, text);
+      }
+      function box(x, y, width, height, active = false) {
+        node('rect', {
+          x, y, width, height, rx: 5,
+          fill: active ? 'color-mix(in srgb, var(--viz-series-1) 10%, transparent)' : 'var(--muted)',
+          stroke: 'var(--border)', 'stroke-width': 1
+        });
+      }
+      function draw() {
+        const f = frames[index];
+        const width = Math.max(280, Math.round(root.getBoundingClientRect().width));
+        const margin = 8, gap = 16, half = (width - 2 * margin - gap) / 2;
+        svg.replaceChildren();
+        svg.setAttribute('viewBox', `0 0 ${width} 388`);
+        svg.setAttribute('height', '388');
+        svg.setAttribute('aria-label', f.alt);
+        node('title', {}, f.event);
+        node('desc', {}, f.alt);
+        label(margin, 18, 'Фактический мир', 'lane-label');
+        box(margin, 30, half, 90, f.powered);
+        box(margin + half + gap, 30, half, 90);
+        label(margin + 12, 52, 'Hsrc · источник');
+        label(margin + 12, 78, f.source);
+        label(margin + 12, 101, f.vm);
+        label(margin + half + gap + 12, 52, 'Hdst · назначение');
+        label(margin + half + gap + 12, 78, 'Доступен');
+        label(margin + half + gap + 12, 101, 'Копии ВМ нет');
+        label(margin, 154, 'Наблюдения Masakari', 'lane-label');
+        box(margin, 166, width - 2 * margin, 74, index === 4);
+        label(margin + 12, 193, f.observed);
+        label(margin + 12, 219, f.nova);
+        label(margin, 276, 'Фаза и разрешённое действие', 'lane-label');
+        box(margin, 288, width - 2 * margin, 78);
+        label(margin + 12, 316, f.phase);
+        label(margin + 12, 343, f.action);
+        root.querySelector('[data-counter]').textContent = `${index + 1} / ${frames.length}`;
+        root.querySelector('[data-event]').textContent = f.event;
+        root.querySelector('[data-detail]').textContent = f.detail;
+        root.querySelector('[data-back]').disabled = index === 0;
+        root.querySelector('[data-next]').disabled = index === frames.length - 1;
+      }
+      root.querySelector('[data-back]').addEventListener('click', () => {
+        if (index > 0) { index -= 1; draw(); }
+      });
+      root.querySelector('[data-next]').addEventListener('click', () => {
+        if (index < frames.length - 1) { index += 1; draw(); }
+      });
+      new ResizeObserver(draw).observe(root);
+      draw();
+    })();
+  </script>
+</div>

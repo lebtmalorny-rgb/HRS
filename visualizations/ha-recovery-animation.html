@@ -1,0 +1,423 @@
+<div id="ha-recovery-animation" lang="ru">
+  <style>
+    #ha-recovery-animation { max-width: 1000px; margin: 0 auto; }
+    #ha-recovery-animation .ha-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; }
+    #ha-recovery-animation .ha-controls { margin: 12px 0; }
+    #ha-recovery-animation .ha-event { margin-top: 14px; }
+    #ha-recovery-animation .ha-caption { margin: 8px 0; }
+    #ha-recovery-animation .ha-scene { display: block; width: 100%; }
+    #ha-recovery-animation .ha-scene text { font-size: 12px; font-weight: 400; fill: var(--foreground); }
+    #ha-recovery-animation .ha-scene .ha-node-title { font-weight: 500; }
+    #ha-recovery-animation .ha-scene .ha-secondary { fill: var(--muted-foreground); }
+    #ha-recovery-animation .ha-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 8px 0; }
+    #ha-recovery-animation .ha-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    #ha-recovery-animation .ha-swatch { width: 18px; height: 3px; display: inline-block; }
+    #ha-recovery-animation .ha-command { background: var(--viz-series-1); }
+    #ha-recovery-animation .ha-observation { background: var(--viz-series-2); }
+    #ha-recovery-animation .ha-effect { background: var(--viz-series-3); }
+    #ha-recovery-animation .ha-loss { background: var(--viz-series-4); }
+    #ha-recovery-animation .ha-guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 7px 16px; padding: 0; margin: 10px 0; list-style: none; }
+    #ha-recovery-animation .ha-guards li { display: flex; gap: 8px; align-items: baseline; }
+    #ha-recovery-animation .ha-guard-mark { flex: 0 0 14px; }
+    #ha-recovery-animation .ha-trace-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
+    #ha-recovery-animation .ha-locks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 12px 0; }
+    #ha-recovery-animation .ha-locks code { overflow-wrap: anywhere; }
+  </style>
+
+  <div class="ha-top">
+    <h3>HA · Координация PowerOps</h3>
+    <span class="text-small text-muted">SC-01 · учебная анимация</span>
+  </div>
+  <div class="viz-controls ha-controls">
+    <label class="form-label">Сценарий
+      <select class="form-select" data-scenario>
+        <option value="normal">C02 · P1 · штатное восстановление</option>
+        <option value="lost">C03 · P1 · тайм-аут подтверждения Off</option>
+        <option value="hold">C01 · P0 · политика all_down</option>
+      </select>
+    </label>
+    <label class="form-label">Скорость анимации
+      <select class="form-select" data-speed>
+        <option value="0.5">0,5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+  </div>
+  <div class="viz-controls">
+    <button class="btn btn-primary" type="button" data-play>Воспроизвести</button>
+    <button class="btn" type="button" data-prev>Назад</button>
+    <button class="btn" type="button" data-next>Вперёд</button>
+    <button class="btn btn-ghost" type="button" data-reset>В начало</button>
+  </div>
+  <div class="ha-trace-meta text-small text-muted">
+    <span data-profile>P1: recovery разрешено исследовательской политикой.</span>
+    <span data-contract>PowerOps включён · auto recovery · ACTIVE → ACTIVE.</span>
+    <span>Сети: manage / tenant / storage.</span>
+  </div>
+  <label class="form-label">Логический кадр <output class="tabular-nums" data-count>1</output>
+    <input class="form-range" data-position type="range" min="0" max="1" value="0" step="1" aria-label="Выбрать логический кадр">
+  </label>
+  <div class="ha-event" aria-live="polite" aria-atomic="true">
+    <strong data-title>Начальное состояние</strong>
+    <span class="text-small text-muted" data-motion></span>
+  </div>
+  <div class="ha-caption text-small" data-detail></div>
+  <svg class="ha-scene" role="img" aria-label="Схема участников HA и состояние виртуальной машины"></svg>
+  <div class="ha-legend text-small" aria-label="Обозначения сообщений">
+    <span><i class="ha-swatch ha-command" aria-hidden="true"></i>Команда / запрос</span>
+    <span><i class="ha-swatch ha-observation" aria-hidden="true"></i>Подтверждение</span>
+    <span><i class="ha-swatch ha-effect" aria-hidden="true"></i>Физический эффект</span>
+    <span><i class="ha-swatch ha-loss" aria-hidden="true"></i>Отказ / потеря</span>
+  </div>
+  <div class="ha-locks text-small" aria-label="Блокировки: состояние backend и подтверждение для C0">
+    <div><code>powerops/host/Hsrc</code><br><span data-lock-host></span></div>
+    <div><code>powerops/evacuation/global</code><br><span data-lock-global></span></div>
+  </div>
+  <div class="ha-caption"><strong data-gate>Допуск evacuation: нет</strong></div>
+  <ul class="ha-guards text-small" data-guards aria-label="Условия модели и глобальная блокировка PowerOps"></ul>
+  <div class="ha-caption text-small text-muted">UUID-check подтверждает владение в момент проверки. Heartbeat не заменяет эту проверку и не отменяет отправленный запрос.</div>
+  <div class="ha-caption text-small text-muted">Предпосылка: после fencing изоляция Hsrc сохраняется до отдельной процедуры возврата.</div>
+  <div class="ha-caption text-small text-muted">Профиль исходников Masakari 1.0.1: global lock, без per-target guard. K — детализация координации; время условное, не измерение стенда и не результат TLC.</div>
+  <noscript>Для управления анимацией нужен JavaScript. Текстовый сценарий: HA_DRS_SCENARIO_01.md.</noscript>
+
+  <script>
+    (() => {
+      // TRACE DATA START
+      const guardLabels = {
+        owner: 'Host lock: UUID подтверждён',
+        policy: 'Политика разрешает recovery',
+        off: 'Есть актуальное Off evidence',
+        nova: 'Nova: disabled / down',
+        reconciled: 'Нет неизвестной предшествующей команды',
+        target: 'Hdst совместим и свободен — A03/A06',
+        global: 'Global lock: UUID подтверждён'
+      };
+      function buildTrace(mode) {
+        let state = {
+          world: { management: 'up', sourcePower: 'on', sourceVM: 'running', targetVM: 'absent' },
+          knowledge: { networks: 'up / up / up', power: 'unknown', nova: 'enabled / up', vmHost: 'Hsrc', vmState: 'ACTIVE', owner: 'нет' },
+          protocol: { phase: 'OBSERVING', blocked: false, quarantine: false },
+          locks: { host: 'free', global: 'free' },
+          coordination: { heartbeat: false, hostView: 'не получен', globalView: 'не получен', check: 'Нет проверок', interval: false },
+          guards: { owner: false, policy: false, off: false, nova: false, reconciled: true, target: true, global: false },
+          operations: { fence: 'NOT_SENT', evacuate: 'NOT_SENT', start: 'NOT_SENT' },
+          commandCount: { fence: 0, evacuate: 0, start: 0 }
+        };
+        const frames = [];
+        const add = (id, title, detail, patch = {}, signal = null) => {
+          for (const [key, values] of Object.entries(patch)) state[key] = { ...state[key], ...values };
+          frames.push({ id, title, detail, state: structuredClone(state), signal });
+        };
+        const signal = (from, to, kind, label, lost = false, via = []) => ({ from, to, kind, label, lost, via });
+        const finish = id => ({ id, profile: mode === 'hold' ? 'P0-ALL-DOWN' : 'P1-POWEROPS-AUTO-GLOBAL', origin: 'illustration', modelVersion: 'HA-MODEL-0.1', frames });
+        const releaseHost = () => {
+          add('K13', 'Выход из recovery: освобождение host lock', 'Завершение dispatch раскручивает контекст lock. Tooz отправляет release; это не команда включить Hsrc.',
+            {}, signal('powerops', 'etcd', 'command', 'release host lock', false, ['tooz']));
+          add('K14', 'Освобождение host lock подтверждено', 'В этой трассе release успешен. При ошибке освобождения подтверждение нельзя было бы считать полученным.',
+            { locks: { host: 'free' }, coordination: { hostView: 'освобождён', check: 'Locks отпущены' }, knowledge: { owner: 'нет' }, guards: { owner: false } },
+            signal('etcd', 'powerops', 'observation', 'release = True', false, ['tooz']));
+          add('K15', 'Tooz coordinator остановлен', 'Heartbeat прекращается после выхода из PowerOpsCoordinator. Освобождение locks не отменяет внешний эффект и не возвращает источник в работу.',
+            { coordination: { heartbeat: false } }, signal('powerops', 'tooz', 'command', 'coordinator.stop()'));
+        };
+        add('INIT', 'Начальное состояние', 'Единственный экземпляр v0 работает на Hsrc. На Hdst экземпляра ВМ нет.');
+        add('T01', 'Management-связь потеряна', 'Меняется связность мира. ВМ продолжает работать; детектор пока хранит прежнее наблюдение.',
+          { world: { management: 'down' } }, signal('source', 'detector', 'loss', 'Потеря связи', true));
+        add('T02', 'Детектор получил новые наблюдения', 'Свежий вектор down/up/up означает потерю одной из трёх наблюдаемых сетей.',
+          { knowledge: { networks: 'down / up / up' }, protocol: { phase: 'SUSPECTED' } }, signal('detector', 'detector', 'observation', 'Новые наблюдения'));
+        if (mode === 'hold') {
+          add('T03', 'all_down не разрешает recovery', 'При down/up/up политика P0 оставляет процесс в POLICY_HOLD. Fencing и evacuation не отправляются; v0 работает.',
+            { protocol: { phase: 'POLICY_HOLD' } }, signal('detector', 'detector', 'observation', 'Recovery не разрешено'));
+          return finish('C01');
+        }
+        add('T05', 'P1 разрешает рассмотреть recovery', 'Это явное исследовательское допущение: разрешающая политика и включённая PowerOps-ветка.',
+          { guards: { policy: true } }, signal('detector', 'controller', 'command', 'Уведомление'));
+        add('K01', 'PowerOps запускает Tooz coordinator', 'Оба — код внутри процесса Masakari engine. start(start_heart=True) включает фоновый heartbeat; backend — etcd3+http(s).',
+          { coordination: { heartbeat: true } }, signal('powerops', 'tooz', 'command', 'start_heart=True'));
+        add('K02', 'Tooz приобретает host lock в etcd', 'powerops/host/Hsrc охватывает весь recovery хоста. Backend уже выдал lock, но PowerOps ещё должен проверить UUID владельца.',
+          { locks: { host: 'C0' }, coordination: { hostView: 'ожидает UUID-check' } },
+          signal('powerops', 'etcd', 'command', 'acquire host lock', false, ['tooz']));
+        add('K03', 'PowerOps проверяет владение host lock', 'assert_healthy() проверяет живость heartbeat thread и выполняет etcd txn: значение ключа равно UUID lock. UUID lock — не notification_uuid.',
+          {}, signal('powerops', 'etcd', 'command', 'etcd txn: VALUE == lock UUID', false, ['tooz']));
+        add('K04 / T05', 'UUID подтверждён: recovery допущено', 'Успешный ответ etcd содержит ожидаемые key/value. Проверка владения и следующий вызов Nova/Ironic не составляют одну атомарную транзакцию.',
+          { coordination: { hostView: 'UUID подтверждён', check: 'host: OK' }, knowledge: { owner: 'C0' }, guards: { owner: true }, protocol: { phase: 'RECOVERY_ADMITTED' } },
+          signal('etcd', 'controller', 'observation', 'host UUID: OK', false, ['tooz', 'powerops']));
+        add('T06', 'Отправлен Nova disable', 'Запрет размещения запрошен. Фактическое исполнение v0 продолжается.',
+          { protocol: { phase: 'DISABLE_PENDING' } }, signal('controller', 'nova', 'command', 'disable Hsrc'));
+        add('T06 · return', 'Disable-вызов завершился без ошибки', 'Архивный путь завершает вызов disable и паузу, без отдельного readback disabled/up. Это слабее T07 модели; состояние disabled/down будет проверено после fencing.',
+          { knowledge: { nova: 'disable: принят' }, protocol: { phase: 'DISABLE_RETURNED' } },
+          signal('nova', 'controller', 'observation', 'disable: вызов завершён'));
+        add('K05', 'Фоновый heartbeat Tooz', 'Heartbeat поддерживает координацию в фоне, пока coordinator запущен. Его наличие само по себе не доказывает владение lock; это не новая UUID-проверка.',
+          {}, signal('tooz', 'etcd', 'command', 'heartbeat'));
+        add('K06', 'Перед fencing владение перепроверено', 'PowerOps вызывает assert_healthy перед fencing и через callback при ожидании стабильного Off. Здесь успешные повторные проверки укрупнены в один кадр.',
+          { coordination: { check: 'host: OK' } }, signal('etcd', 'controller', 'observation', 'Повторный UUID-check: OK', false, ['tooz', 'powerops']));
+        add('T08', 'Отправлен power-off', 'Ironic/BMC получает запрос для точного источника. Исход команды пока неизвестен контроллеру.',
+          { protocol: { phase: 'FENCE_PENDING' }, operations: { fence: 'SENT_UNKNOWN' }, commandCount: { fence: 1 }, guards: { reconciled: false } },
+          signal('controller', 'ironic', 'command', 'power-off Hsrc'));
+        add('T09', 'Источник физически выключен', 'v0 остановлен в фактическом мире. Фаза остаётся FENCE_PENDING, подтверждения Off ещё нет.',
+          { world: { sourcePower: 'off', sourceVM: 'stopped' } }, signal('ironic', 'source', 'effect', 'Питание OFF'));
+        if (mode === 'lost') {
+          add('LOSS', 'Допустимое подтверждение Off не получено', 'Источник уже выключен, но readback не дал нужного стабильного evidence до дедлайна. Одно потерянное сообщение само по себе ещё не означает завершение polling.',
+            {}, signal('ironic', 'controller', 'loss', 'Ответ потерян', true));
+          add('U01', 'Тайм-аут: попытка auto recovery завершена ошибкой', 'Исход power-off остаётся неизвестным контроллеру. BLOCKED — обозначение модели; архивный flow завершается ошибкой, без автоматического U02 resume или power-on.',
+            { protocol: { blocked: true } }, signal('controller', 'controller', 'loss', 'Timeout'));
+          releaseHost();
+          return finish('C03');
+        }
+        add('T10', 'Получено допустимое подтверждение Off', 'Последовательные readback и корреляция приняты по допущениям модели. Источник остаётся в карантине.',
+          { knowledge: { power: 'off' }, protocol: { phase: 'SOURCE_ISOLATED', blocked: false, quarantine: true }, guards: { off: true, reconciled: true }, operations: { fence: 'CONFIRMED' } },
+          signal('ironic', 'controller', 'observation', 'Off evidence'));
+        add('T11', 'Запрошено состояние Nova service', 'Одного Off evidence недостаточно: контроллер отдельно проверяет disabled/down.',
+          {}, signal('controller', 'nova', 'command', 'Чтение service'));
+        add('T11', 'Nova подтвердила disabled/down', 'Теперь подтверждены изоляция и состояние сервиса. Глобальный evacuation lock ещё предстоит получить; резерв Hdst задан допущением модели.',
+          { knowledge: { nova: 'disabled / down' }, protocol: { phase: 'SOURCE_DOWN_CONFIRMED' }, guards: { nova: true } },
+          signal('nova', 'controller', 'observation', 'disabled / down'));
+        add('K07', 'Перед ВМ приобретается global evacuation lock', 'powerops/evacuation/global сериализует участвующие recovery в общем backend/namespace. Это не reservation Hdst и не per-target guard; совместимость и резерв Hdst заданы A03/A06.',
+          { locks: { global: 'C0' }, coordination: { globalView: 'ожидает UUID-check' } },
+          signal('powerops', 'etcd', 'command', 'acquire global lock', false, ['tooz']));
+        add('K08', 'Проверены UUID обеих блокировок', 'assert_healthy проверяет каждый active lock: host и global. Nova VM lock/reset/evacuate и выбранные проверки результата также защищены вызовами assert_healthy.',
+          { coordination: { globalView: 'UUID подтверждён', check: 'host + global: OK' }, guards: { global: true } },
+          signal('etcd', 'controller', 'observation', 'host + global UUID: OK', false, ['tooz', 'powerops']));
+        add('T12', 'Отправлена evacuation', 'В методе auto target не передаётся: назначение выбирает Nova. В этой трассе им станет Hdst. Приём запроса ещё не означает восстановления ВМ.',
+          { protocol: { phase: 'EVAC_PENDING' }, operations: { evacuate: 'SENT_UNKNOWN' }, commandCount: { evacuate: 1 } },
+          signal('controller', 'nova', 'command', 'evacuate V · выбор Nova'));
+        add('T13', 'На Hdst восстановлен и запущен v1', 'Профиль архивной ветки для исходно ACTIVE ВМ: evacuation возвращает её в ACTIVE. Отдельного start здесь нет; наблюдение C0 пока указывает Hsrc.',
+          { world: { targetVM: 'running' } }, signal('nova', 'target', 'effect', 'v1 работает'));
+        add('T14', 'Nova подтвердила результат evacuation', 'Новый host отличается от источника, task_state=None, vm_state=active. Polling, финальная сверка и VM unlock укрупнены; host и global locks всё ещё удерживаются.',
+          { knowledge: { vmHost: 'Hdst', vmState: 'ACTIVE' }, operations: { evacuate: 'CONFIRMED' } },
+          signal('nova', 'controller', 'observation', 'Hdst · ACTIVE · task=None'));
+        add('K09', 'После evacuation владение перепроверено', 'Перед evacuation_interval PowerOps вновь проверяет heartbeat thread и UUID обоих удерживаемых locks.',
+          {}, signal('etcd', 'controller', 'observation', 'host + global UUID: OK', false, ['tooz', 'powerops']));
+        add('K10', 'evacuation_interval — global lock ещё занят', 'Пауза находится внутри контекста global lock. В этой успешной трассе владение сохраняется: другая эвакуация ждёт освобождения. Heartbeat продолжает работать; потеря lease — отдельный сценарий.',
+          { coordination: { interval: true } }, signal('controller', 'controller', 'command', 'evacuation_interval'));
+        add('K11', 'Интервал окончен: release global lock', 'Host lock продолжает охватывать recovery источника. Для следующей ВМ global lock нужно было бы приобрести заново.',
+          { coordination: { interval: false } }, signal('powerops', 'etcd', 'command', 'release global lock', false, ['tooz']));
+        add('K12', 'Освобождение global lock подтверждено', 'В этой трассе release успешен. Доступ к глобальной очереди освобождён; это не сигнал включить исходный хост.',
+          { locks: { global: 'free' }, coordination: { globalView: 'освобождён', check: 'host: OK' }, guards: { global: false } },
+          signal('etcd', 'powerops', 'observation', 'release = True', false, ['tooz']));
+        add('T18', 'Объявлено восстановление исполнения ВМ', 'Единственный работающий экземпляр — v1 на Hdst; Hsrc остаётся выключенным и в карантине. Готовность приложения здесь не проверяется.',
+          { protocol: { phase: 'VM_RECOVERED' } }, signal('controller', 'controller', 'observation', 'VM_RECOVERED'));
+        releaseHost();
+        return finish('C02');
+      }
+      const traces = { normal: buildTrace('normal'), lost: buildTrace('lost'), hold: buildTrace('hold') };
+      // TRACE DATA END
+
+      const root = document.getElementById('ha-recovery-animation');
+      const q = selector => root.querySelector(selector);
+      const svg = q('.ha-scene');
+      const ns = 'http://www.w3.org/2000/svg';
+      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+      const colors = { command: 'var(--viz-series-1)', observation: 'var(--viz-series-2)', effect: 'var(--viz-series-3)', loss: 'var(--viz-series-4)' };
+      let mode = 'normal', index = 0, progress = 0, playing = false, speed = 1, raf = null, lastTime = null;
+      let positions = {}, packet = null, activePath = null, packetLength = 0;
+      let sceneWidth = 0;
+      const current = () => traces[mode].frames[index];
+      const next = () => traces[mode].frames[index + 1];
+      const make = (name, attrs = {}, text, parent = svg) => {
+        const element = document.createElementNS(ns, name);
+        Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, String(value)));
+        if (text !== undefined) element.textContent = text;
+        parent.appendChild(element);
+        return element;
+      };
+      function text(x, y, value, cls = '', parent = svg) {
+        return make('text', { x, y, class: cls }, value, parent);
+      }
+      function route(from, to) {
+        const a = positions[from], b = positions[to];
+        if (from === to) return `M ${a.x + a.w / 2 - 14} ${a.y - 10} L ${a.x + a.w / 2 + 14} ${a.y - 10}`;
+        if (sceneWidth < 680 && [from, to].includes('controller') && [from, to].some(id => id === 'ironic' || id === 'nova')) {
+          const externalId = from === 'controller' ? to : from;
+          const controller = positions.controller, external = positions[externalId];
+          const left = externalId === 'ironic';
+          const side = left ? 10 : sceneWidth - 12;
+          const points = [[left ? controller.x : controller.x + controller.w, controller.y + controller.h / 2], [side, controller.y + controller.h / 2], [side, external.y - 18], [external.x + external.w / 2, external.y - 18], [external.x + external.w / 2, external.y]];
+          if (from !== 'controller') points.reverse();
+          return points.map(([x, y], i) => `${i ? 'L' : 'M'} ${x} ${y}`).join(' ');
+        }
+        if (sceneWidth < 680 && [from, to].includes('tooz') && [from, to].includes('etcd')) {
+          const side = sceneWidth - 5;
+          return `M ${a.x + a.w} ${a.y + a.h / 2} L ${side} ${a.y + a.h / 2} L ${side} ${b.y + b.h / 2} L ${b.x + b.w} ${b.y + b.h / 2}`;
+        }
+        if ((from === 'source' && to === 'detector') || (to === 'source' && from === 'detector')) {
+          return `M ${a.x} ${a.y + a.h / 2} C 3 ${a.y + a.h / 2}, 3 ${b.y + b.h / 2}, ${b.x} ${b.y + b.h / 2}`;
+        }
+        const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
+        const bx = b.x + b.w / 2, by = b.y + b.h / 2;
+        if (Math.abs(by - ay) > Math.abs(bx - ax) * 0.7) {
+          const y1 = by > ay ? a.y + a.h : a.y;
+          const y2 = by > ay ? b.y : b.y + b.h;
+          const mid = (y1 + y2) / 2;
+          return `M ${ax} ${y1} C ${ax} ${mid}, ${bx} ${mid}, ${bx} ${y2}`;
+        }
+        const x1 = bx > ax ? a.x + a.w : a.x;
+        const x2 = bx > ax ? b.x : b.x + b.w;
+        const mid = (x1 + x2) / 2;
+        return `M ${x1} ${ay} C ${mid} ${ay}, ${mid} ${by}, ${x2} ${by}`;
+      }
+      function node(id, title, lines, fill = 'var(--muted)') {
+        const p = positions[id];
+        const group = make('g', { 'data-node': id });
+        make('rect', { x: p.x, y: p.y, width: p.w, height: p.h, rx: 7, fill, stroke: 'var(--border)', 'stroke-width': 1 }, undefined, group);
+        text(p.x + 12, p.y + 23, title, 'ha-node-title', group);
+        lines.forEach((line, i) => text(p.x + 12, p.y + 45 + i * 19, line, i === 0 ? '' : 'ha-secondary', group));
+      }
+      function drawScene() {
+        const s = current().state;
+        sceneWidth = Math.max(280, Math.floor(root.getBoundingClientRect().width));
+        const narrow = sceneWidth < 680;
+        const margin = 18, gap = narrow ? 18 : 24;
+        const col = (sceneWidth - margin * 2 - gap * (narrow ? 1 : 2)) / (narrow ? 2 : 3);
+        const right = sceneWidth - margin - col;
+        const middle = margin + col + gap;
+        const executiveY = narrow ? 470 : 314;
+        const worldY = narrow ? 632 : 475;
+        positions = {
+          detector: { x: margin, y: narrow ? 30 : 48, w: col, h: 87 },
+          controller: { x: narrow ? margin : middle, y: narrow ? 176 : 48, w: narrow ? sceneWidth - 36 : col, h: 91 },
+          powerops: { x: narrow ? margin : right, y: narrow ? 310 : 48, w: col, h: 91 },
+          tooz: { x: right, y: narrow ? 310 : 172, w: col, h: 91 },
+          etcd: { x: right, y: narrow ? 30 : executiveY, w: col, h: 91 },
+          ironic: { x: margin, y: executiveY, w: col, h: 91 },
+          nova: { x: narrow ? right : middle, y: executiveY, w: col, h: 91 },
+          source: { x: margin, y: worldY, w: col, h: 108 },
+          target: { x: narrow ? right : middle, y: worldY, w: col, h: 108 }
+        };
+        svg.replaceChildren();
+        svg.setAttribute('viewBox', `0 0 ${sceneWidth} ${worldY + 126}`);
+        svg.setAttribute('height', worldY + 126);
+        const title = `${current().id}: ${current().title}. Источник ${s.world.sourcePower === 'on' ? 'включён' : 'выключен'}. Знание Off: ${s.knowledge.power}. Фаза ${s.protocol.phase}${s.protocol.blocked ? ', BLOCKED' : ''}.`;
+        svg.setAttribute('aria-label', title);
+        make('title', {}, title);
+        make('desc', {}, current().detail);
+        const processX = narrow ? 10 : middle - 8;
+        const processY = narrow ? 140 : 8;
+        const processW = narrow ? sceneWidth - 20 : sceneWidth - processX - 10;
+        make('rect', { x: processX, y: processY, width: processW, height: narrow ? 280 : 270, rx: 8, fill: 'none', stroke: 'var(--border)', 'stroke-width': 1 });
+        text(processX + 8, processY + 20, 'Masakari engine · один процесс', 'ha-node-title');
+        const edges = [['source', 'detector'], ['detector', 'controller'], ['controller', 'powerops'], ['powerops', 'tooz'], ['tooz', 'etcd'], ['controller', 'ironic'], ['controller', 'nova'], ['ironic', 'source'], ['nova', 'target']];
+        edges.forEach(([from, to]) => {
+          const broken = from === 'source' && s.world.management === 'down';
+          make('path', { d: route(from, to), fill: 'none', stroke: broken ? colors.loss : 'var(--border)', 'stroke-width': 1.2, 'stroke-dasharray': broken ? '3 6' : 'none' });
+        });
+        text(margin, worldY - 16, 'Фактический мир', 'ha-secondary');
+        const running = [s.world.sourceVM === 'running' ? 'v0' : null, s.world.targetVM === 'running' ? 'v1' : null].filter(Boolean);
+        if (!narrow) text(sceneWidth / 2, worldY - 16, `Исполняются: ${running.length ? running.join(', ') : 'нет'}`, 'ha-secondary');
+        node('detector', col < 140 ? 'Consul / D' : 'Consul / monitor', [s.knowledge.networks, 'Сети · readback']);
+        node('controller', 'Recovery · C0', [s.protocol.phase, s.protocol.blocked ? 'BLOCKED · исход неизвестен' : 'Управление восстановлением'], s.protocol.blocked ? 'color-mix(in srgb, var(--viz-series-4) 10%, transparent)' : 'var(--muted)');
+        node('powerops', 'PowerOps', ['Coordinator', `H: ${s.guards.owner ? '✓' : '—'}   G: ${s.guards.global ? '✓' : '—'}`]);
+        node('tooz', col < 140 ? 'Tooz' : 'Tooz · библиотека', ['etcd3gw client', s.coordination.heartbeat ? 'HB: в фоне' : 'HB: выкл.']);
+        node('etcd', col < 140 ? 'etcd' : 'etcd · backend', [`H: ${s.locks.host === 'C0' ? 'занят C0' : 'свободен'}`, `G: ${s.locks.global === 'C0' ? 'занят C0' : 'свободен'}`]);
+        node('ironic', 'Ironic / BMC', [s.knowledge.power === 'off' ? 'Off: да' : 'Off: неизвестно', `power-off: ${s.commandCount.fence}`]);
+        node('nova', 'Nova · readback', [s.knowledge.nova, `${s.knowledge.vmHost} · ${s.knowledge.vmState}`]);
+        node('source', col < 140 ? 'Hsrc' : 'Hsrc · источник', [s.world.sourcePower === 'on' ? 'Питание ON' : 'Питание OFF', s.world.sourceVM === 'running' ? 'v0 · работает' : 'v0 · остановлен', s.protocol.blocked ? 'Возврат: нет' : `Карантин: ${s.protocol.quarantine ? 'да' : 'нет'}`], s.world.sourceVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
+        const targetVM = s.world.targetVM === 'absent' ? 'Нет ВМ' : s.world.targetVM === 'running' ? 'v1 · работает' : 'v1 · остановлен';
+        node('target', col < 130 ? 'Hdst · цель' : 'Hdst · назначение', ['Питание ON', targetVM, 'Данные: да'], s.world.targetVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
+        const upcoming = next();
+        activePath = null; packet = null; packetLength = 0;
+        if (upcoming?.signal) {
+          const m = upcoming.signal;
+          const hops = [m.from, ...m.via, m.to];
+          const path = hops.slice(1).map((to, i) => route(hops[i], to)).join(' ');
+          activePath = make('path', { d: path, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.kind === 'observation' ? '5 4' : 'none', visibility: 'hidden' });
+          packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden' });
+          packetLength = activePath.getTotalLength();
+        }
+        drawPacket();
+      }
+      function drawPacket() {
+        if (!packet || !activePath) return;
+        const visible = progress > 0;
+        activePath.setAttribute('visibility', visible ? 'visible' : 'hidden');
+        const m = next().signal;
+        const t = reducedMotion.matches ? 0.5 : progress;
+        const distance = m.lost ? Math.min(t, 0.55) : t;
+        const p = activePath.getPointAtLength(packetLength * distance);
+        packet.setAttribute('cx', p.x);
+        packet.setAttribute('cy', p.y);
+        packet.setAttribute('visibility', visible && !(m.lost && progress > 0.72) ? 'visible' : 'hidden');
+        packet.setAttribute('r', m.from === m.to && !reducedMotion.matches ? 4 + 3 * Math.sin(Math.PI * progress) : 5);
+      }
+      function renderUI() {
+        const frames = traces[mode].frames;
+        const frame = current(), s = frame.state;
+        q('[data-count]').textContent = `${index + 1} / ${frames.length}`;
+        q('[data-position]').max = frames.length - 1;
+        q('[data-position]').value = index;
+        q('[data-position]').setAttribute('aria-valuetext', `${index + 1}: ${frame.id}, ${frame.title}`);
+        q('[data-title]').textContent = `${frame.id} · ${frame.title}`;
+        q('[data-detail]').textContent = frame.detail;
+        q('[data-prev]').disabled = index === 0 && progress === 0;
+        q('[data-next]').disabled = index === frames.length - 1;
+        q('[data-play]').textContent = playing ? 'Пауза' : index === frames.length - 1 ? 'Повторить' : 'Воспроизвести';
+        q('[data-play]').setAttribute('aria-pressed', String(playing));
+        q('[data-motion]').textContent = progress > 0 || playing ? ` → ${next()?.signal?.label || next()?.title || ''}${playing ? '' : ' · пауза'}` : '';
+        q('[data-profile]').textContent = mode === 'hold' ? 'P0: all_down по трём сетям.' : 'P1: recovery разрешено исследовательской политикой.';
+        q('[data-contract]').textContent = mode === 'hold' ? 'При down/up/up ВМ продолжает работать.' : 'PowerOps включён · auto recovery · ACTIVE → ACTIVE.';
+        for (const key of ['host', 'global']) {
+          const actual = s.locks[key] === 'C0' ? 'занят C0' : 'свободен';
+          q(`[data-lock-${key}]`).textContent = `etcd: ${actual} · C0: ${s.coordination[key + 'View']}${key === 'global' && s.coordination.interval ? ' · удерживается на evacuation_interval' : ''}`;
+        }
+        const allGuards = Object.values(s.guards).every(Boolean);
+        const canSend = allGuards && !s.protocol.blocked && s.protocol.phase === 'SOURCE_DOWN_CONFIRMED' && s.operations.evacuate === 'NOT_SENT';
+        let gate = 'Допуск evacuation: основания ещё не собраны';
+        if (canSend) gate = 'Evacuation разрешена: основания модели + global lock';
+        else if (s.protocol.blocked) gate = 'Допуск evacuation: запрещён до разрешения исхода';
+        else if (s.operations.evacuate !== 'NOT_SENT') gate = 'Evacuation уже отправлена; повторный допуск не выдаётся';
+        else if (mode === 'hold') gate = 'Допуск evacuation: политика не разрешает recovery';
+        q('[data-gate]').textContent = gate;
+        q('[data-guards]').replaceChildren(...Object.entries(guardLabels).map(([key, label]) => {
+          const item = document.createElement('li');
+          const mark = document.createElement('span');
+          mark.className = 'ha-guard-mark';
+          mark.setAttribute('aria-hidden', 'true');
+          mark.textContent = s.guards[key] ? '✓' : '—';
+          const text = document.createElement('span'); text.textContent = label;
+          item.setAttribute('aria-label', `${label}: ${s.guards[key] ? 'подтверждено' : 'не подтверждено'}`);
+          item.append(mark, text); return item;
+        }));
+      }
+      function render() { renderUI(); drawScene(); }
+      function stop() {
+        playing = false;
+        if (raf !== null) cancelAnimationFrame(raf);
+        raf = null; lastTime = null;
+      }
+      function seek(position) {
+        stop(); index = Math.max(0, Math.min(traces[mode].frames.length - 1, position)); progress = 0; render();
+      }
+      function tick(now) {
+        if (!playing) return;
+        if (lastTime !== null) progress += Math.min(now - lastTime, 120) / (1800 / speed);
+        lastTime = now;
+        if (progress >= 1) {
+          index += 1; progress = 0;
+          if (index === traces[mode].frames.length - 1) stop();
+          render();
+        } else drawPacket();
+        if (playing) raf = requestAnimationFrame(tick);
+      }
+      q('[data-play]').addEventListener('click', () => {
+        if (playing) { stop(); renderUI(); return; }
+        if (index === traces[mode].frames.length - 1) { index = 0; progress = 0; }
+        playing = true; lastTime = null; render(); raf = requestAnimationFrame(tick);
+      });
+      q('[data-prev]').addEventListener('click', () => seek(progress > 0 ? index : index - 1));
+      q('[data-next]').addEventListener('click', () => seek(index + 1));
+      q('[data-reset]').addEventListener('click', () => seek(0));
+      q('[data-position]').addEventListener('input', event => seek(Number(event.target.value)));
+      q('[data-speed]').addEventListener('change', event => { speed = Number(event.target.value); });
+      q('[data-scenario]').addEventListener('change', event => { mode = event.target.value; seek(0); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && playing) { stop(); renderUI(); }
+      });
+      reducedMotion.addEventListener('change', drawPacket);
+      new ResizeObserver(() => {
+        const width = Math.max(280, Math.floor(root.getBoundingClientRect().width));
+        if (width !== sceneWidth) drawScene();
+      }).observe(root);
+      render();
+    })();
+  </script>
+</div>
