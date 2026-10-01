@@ -1035,8 +1035,48 @@ svg.lucide {
 html&gt;body{padding:0}&lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
 &lt;div id=&quot;ha-recovery-animation&quot; lang=&quot;ru&quot;&gt;
   &lt;style&gt;
+    /* Only enabled without host-provided theme tokens. System colors follow
+       the browser theme; embedded and exported views keep their existing CSS. */
+    html[data-ha-local-theme] { color-scheme: light dark; background: Canvas; color: CanvasText; }
+    html[data-ha-local-theme] body { margin: 0; padding: 16px; }
+    #ha-recovery-animation[data-local-theme] {
+      --background: Canvas;
+      --foreground: CanvasText;
+      --muted: color-mix(in srgb, CanvasText 8%, Canvas);
+      --muted-foreground: color-mix(in srgb, CanvasText 75%, Canvas);
+      --border: color-mix(in srgb, CanvasText 24%, Canvas);
+      --viz-series-1: LinkText;
+      --viz-series-2: VisitedText;
+      --viz-series-3: CanvasText;
+      --viz-series-4: Highlight;
+      --font-size-base: 14px;
+      font: var(--font-size-base)/1.5 system-ui, sans-serif;
+      color: var(--foreground);
+      color-scheme: light dark;
+    }
+    #ha-recovery-animation[data-local-theme] h3 { font-size: 1.25em; font-weight: 500; margin: 0; }
+    #ha-recovery-animation[data-local-theme] strong { font-weight: 500; }
+    #ha-recovery-animation[data-local-theme] .text-small { font-size: .875em; }
+    #ha-recovery-animation[data-local-theme] .text-muted { color: var(--muted-foreground); }
+    #ha-recovery-animation[data-local-theme] .tabular-nums { font-variant-numeric: tabular-nums; }
+    #ha-recovery-animation[data-local-theme] .viz-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+    #ha-recovery-animation[data-local-theme] .form-label { display: block; min-width: 0; }
+    #ha-recovery-animation[data-local-theme] .viz-controls &gt; .form-label { flex: 1 1 220px; }
+    #ha-recovery-animation[data-local-theme] .form-select { display: block; width: 100%; min-width: 0; margin-top: 4px; padding: 6px 8px; font: inherit; color: FieldText; background: Field; border: 1px solid var(--border); border-radius: 6px; }
+    #ha-recovery-animation[data-local-theme] .form-range { display: block; width: 100%; margin: 8px 0; }
+    #ha-recovery-animation[data-local-theme] .btn { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; color: ButtonText; background: ButtonFace; cursor: pointer; }
+    #ha-recovery-animation[data-local-theme] .btn:disabled { color: GrayText; cursor: default; }
+    #ha-recovery-animation[data-local-theme] .btn-primary { background: var(--foreground); color: var(--background); }
+    @media (pointer: coarse) {
+      #ha-recovery-animation[data-local-theme] .btn,
+      #ha-recovery-animation[data-local-theme] .form-select { min-height: 44px; }
+      #ha-recovery-animation[data-local-theme] .form-select { font-size: 16px; }
+      #ha-recovery-animation[data-local-theme] .form-range { min-height: 44px; }
+    }
     #ha-recovery-animation { max-width: 1000px; margin: 0 auto; }
     #ha-recovery-animation .ha-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; }
     #ha-recovery-animation .ha-controls { margin: 12px 0; }
@@ -1242,6 +1282,12 @@ html&gt;body{padding:0}&lt;/style&gt;
       // TRACE DATA END
 
       const root = document.getElementById(&#x27;ha-recovery-animation&#x27;);
+      // Opening this source directly must not require the visualization host.
+      // Do not shadow the host&#x27;s inherited custom properties when present.
+      if (!getComputedStyle(root).getPropertyValue(&#x27;--foreground&#x27;).trim()) {
+        root.dataset.localTheme = &#x27;&#x27;;
+        document.documentElement.dataset.haLocalTheme = &#x27;&#x27;;
+      }
       const q = selector =&gt; root.querySelector(selector);
       const svg = q(&#x27;.ha-scene&#x27;);
       const ns = &#x27;http://www.w3.org/2000/svg&#x27;;
