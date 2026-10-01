@@ -1,6 +1,6 @@
 # Визуальная карта исследования HA/DRS
 
-Дата: 2026-10-01. Версия: 0.4.
+Дата: 2026-10-01. Версия: 0.5.
 
 Карта объединяет два уровня описания: исходный [паспорт модели v0.1](HA_DRS_MODEL_V0_1.md)
 с [переходами SC-01](HA_DRS_SCENARIO_01.md) и отдельные иллюстративные трассы
@@ -54,6 +54,66 @@ Namespaces предполагаются подготовленными. Нача
 внутри компонента без движущегося сообщения к нему самому. Состояние блоков
 относится к последнему завершённому кадру; выполняющийся переход подписан отдельно.
 
+### Постоянные связи и положение etcd
+
+Etcd расположен в центре координации. Тонкие серые линии постоянно показывают
+связи участников выбранных сценариев; это **не текущий трафик, не проверка
+доступности и не признак удержания lock**. Активный запрос или ответ выделяется
+поверх них цветом и направленной стрелкой. Линии включают также наблюдения
+и физические эффекты, поэтому не все связи являются API-вызовами.
+
+С etcd связаны пять клиентов: Masakari API, Masakari engine, Mistral,
+Watcher и принимающий nova-compute Hdst. Masakari API устанавливает Watcher hold;
+engine работает с host lock, hold и evacuation intent/proof; Mistral использует
+host lock; Watcher проверяет допуск автоматизации; принимающий compute выполняет
+evacuation admission и сохраняет результат. Nova API, conductor, scheduler,
+libvirt/QEMU и BMC не показаны клиентами этих механизмов etcd. Команды Nova
+и Ironic имеют собственные связи и не проходят через центральный блок.
+
+### Nova: управление, сервис хоста и фактическая ВМ
+
+В HTML отдельно показаны Nova API, nova-conductor и nova-scheduler.
+Для Hsrc и Hdst различаются nova-compute и libvirt/QEMU: compute исполняет
+задачи Nova, а блок libvirt/QEMU показывает физическое состояние домена
+в модели вместе с питанием соответствующего хоста. На Hdst guard находится
+в процессе nova-compute, до локального rebuild через драйвер libvirt.
+Название контейнера `nova_libvirt` не означает ещё один Nova API.
+
+`enabled/disabled` и `up/down` относятся к **nova-compute конкретного хоста**.
+`ACTIVE` относится к **ВМ V**. Эти значения больше не объединяются в карточке
+Nova API. Для Hdst `enabled/up` — явно заданное начальное условие иллюстрации,
+а не результат дополнительной проверки стенда. Для Hsrc результат команды
+`disable: вызов завершён` не заменяет последующее чтение `disabled/down`.
+
+Местоположение и статус ВМ по Nova подписаны как последнее наблюдение.
+До нового readback наблюдатель может по-прежнему знать `Hsrc · ACTIVE`,
+хотя в фактическом мире Hsrc уже выключен, а затем v1 запущен на Hdst.
+Отсутствие heartbeat nova-compute само по себе также не означает остановку
+libvirt или ВМ. Физический эффект и обновление знания показаны разными кадрами.
+
+Для автоматического выбора назначения раскрыт путь:
+
+1. Nova API отправляет асинхронный `rebuild_instance(recreate=true)` в conductor
+   **до** ответа о принятии POST. Ответ не подтверждает исполнение rebuild.
+2. Conductor вызывает `scheduler.select_destinations`; scheduler возвращает
+   выбранные host/node обратно conductor.
+3. Conductor отправляет compute RPC принимающему nova-compute Hdst.
+4. Receiving guard регистрирует `WAITING` и получает admission `RUNNING` в etcd.
+   Только после допуска исполняется локальный rebuild через libvirt/QEMU Hdst.
+
+Placement, БД, RabbitMQ и служебные вызовы Nova свёрнуты. Путь показан по
+архитектурному справочнику upstream Nova `stable/2025.1`:
+[API evacuate](https://github.com/openstack/nova/blob/stable/2025.1/nova/compute/api.py#L5236-L5304),
+[conductor RPC cast](https://github.com/openstack/nova/blob/stable/2025.1/nova/conductor/rpcapi.py),
+[выбор назначения и dispatch conductor](https://github.com/openstack/nova/blob/stable/2025.1/nova/conductor/manager.py#L1237-L1327),
+[libvirt spawn](https://github.com/openstack/nova/blob/stable/2025.1/nova/virt/libvirt/driver.py#L4452-L4513).
+Эти ссылки подтверждают распределение обязанностей upstream. Полного дерева
+Nova форка среди предоставленных архивов нет; совместимость с ним receiving
+guard и фактическая конфигурация libvirt ещё не проверены. Локальный
+[патч receiving guard](https://github.com/lebtmalorny-rgb/mimaric/blob/71b0123f390bfeaab4dc4ca2dffaa6fab32a6cdf/hotfixes/masakari-per-target-evacuation/nova/0001-Guard-receiving-compute-evacuation-with-durable-per-.patch)
+задаёт обёртку `ComputeManager.rebuild_instance` и сохраняет выбранное Nova
+назначение; он не заменяет scheduler или Placement.
+
 ### Три независимых механизма координации
 
 В схеме PowerOps и Tooz находятся **внутри Masakari engine и Mistral executor**;
@@ -79,7 +139,9 @@ Heartbeat Tooz и проверка UUID владения также различ
 2. Masakari получает host lock, выполняет disable, fencing и получает Off evidence,
    затем подтверждение Nova `disabled/down`.
 3. До `POST evacuate` сохраняются durable intent `SUBMITTING`, request ID и VM claim.
-   Nova сама выбирает назначение; target не задаётся Masakari в `auto`.
+   Nova API отправляет задачу conductor до ответа на POST. Conductor получает
+   назначение от scheduler и передаёт rebuild выбранному nova-compute;
+   target не задаётся Masakari в `auto`.
 4. Guard принимающего nova-compute регистрирует `WAITING`; etcd CAS атомарно
    проверяет VM claim, доступность target по ComputeNode UUID и global slot.
    Только admission `RUNNING` разрешает локальный rebuild.

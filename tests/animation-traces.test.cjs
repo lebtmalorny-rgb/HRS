@@ -12,7 +12,7 @@ const traces = vm.runInNewContext(`${region[1]}\n;traces`, { structuredClone }, 
 const modes = ['normal', 'lost', 'hold', 'planned', 'contention', 'return', 'unknown'];
 const final = mode => traces[mode].frames.at(-1).state;
 const incremented = (a, b, key) => b.counts[key] > a.counts[key];
-const novaDown = state => state.knowledge.nova.replace(/\s/g, '') === 'disabled/down';
+const novaDown = state => state.knowledge.sourceService.replace(/\s/g, '') === 'disabled/down';
 
 test('research traces preserve temporal recovery and coordination invariants', async t => {
   const missing = modes.filter(mode => !traces[mode]);
@@ -88,6 +88,35 @@ test('research traces preserve temporal recovery and coordination invariants', a
     assert.ok(submitted >= 0 && confirmed > submitted, 'confirmation must follow evacuation submission');
     assert.ok(frames.some((f, i) => i > submitted && i <= confirmed && f.signal?.from === 'nova'
       && f.signal?.to === 'controller' && f.signal?.kind === 'observation' && f.state.knowledge.vmHost === 'Hdst'), 'etcd completion proof alone cannot establish Nova destination observation');
+  });
+
+  await t.test('Nova schedules through conductor before dispatch and receiving admission', () => {
+    for (const mode of ['normal', 'contention', 'unknown']) {
+      const frames = traces[mode].frames;
+      const at = (from, to) => frames.findIndex(f => f.signal?.from === from && f.signal?.to === to);
+      const handoff = at('nova', 'conductor'), schedule = at('conductor', 'scheduler');
+      const selected = at('scheduler', 'conductor'), dispatch = at('conductor', 'compute');
+      const admitted = frames.findIndex(f => f.state.evacuation.operation === 'RUNNING');
+      assert.ok(handoff >= 0 && schedule > handoff && selected > schedule && dispatch > selected && admitted > dispatch, mode);
+      const accepted = frames.findIndex(f => f.id.endsWith('-evacuate-accepted'));
+      if (accepted >= 0) assert.ok(accepted > handoff, 'API dispatches conductor before replying to POST');
+      assert.equal(frames[selected].state.scheduling.target, 'Hdst');
+      assert.equal(frames[selected].state.world.targetVM, 'absent', 'selection is not execution');
+      assert.equal(frames[dispatch].state.evacuation.operation, 'NONE', 'dispatch is not receiving admission');
+    }
+  });
+
+  await t.test('source service evidence stays separate from destination service and VM observation', () => {
+    const frames = traces.normal.frames, s = final('normal');
+    assert.equal(s.knowledge.sourceService, 'disabled / down');
+    assert.equal(s.knowledge.targetService, 'enabled / up');
+    assert.equal(s.knowledge.vmHost, 'Hdst');
+    assert.equal(s.knowledge.vmState, 'ACTIVE');
+    const fenced = frames.find(f => f.state.world.sourcePower === 'off');
+    assert.equal(fenced.state.knowledge.vmHost, 'Hsrc', 'physical fencing does not replace API observation');
+    const rebuilt = frames.find(f => f.state.world.targetVM === 'running');
+    assert.equal(rebuilt.state.knowledge.vmHost, 'Hsrc', 'rebuild does not refresh observer knowledge');
+    assert.equal(rebuilt.state.knowledge.targetService, 'enabled / up');
   });
 
   await t.test('illustrated unknown schedule finishes Masakari before receiving operation becomes unknown', () => {
