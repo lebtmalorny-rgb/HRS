@@ -8,7 +8,9 @@
 Это выбранный функциональный состав, а не подтверждение включённых флагов или готовой совместимой сборки.
 В составе есть три разных механизма координации: host lock через Tooz, durable evacuation admission и Watcher automation hold.
 Новая ветка admission заменяет прежнюю глобальную Tooz-блокировку evacuation при включённом guard.
-Текущая HTML-анимация пока показывает прежний профиль с global lock; новую композицию она полностью не отражает.
+HTML-анимация использует композиционный исследовательский профиль с предполагаемыми включёнными
+PowerOps, Watcher hold guard и receiving-compute evacuation guard. Семь отдельных трасс иллюстрируют
+аварийный и плановый пути; прежняя global Tooz evacuation lock в них не используется.
 
 Исследование выполнено по исходникам, шаблонам, manifest и изолированным проверкам применимости патчей.
 Не выполнялись сборка общего дерева, установка пакетов, развёртывание, обращения к кластеру и power-операции.
@@ -93,7 +95,7 @@ Host lock при этом сохраняется. Новый guard требуе�
 2. Nova выбирает назначение; guard в принимающем nova-compute регистрирует `WAITING` до локального rebuild.
 3. Etcd CAS атомарно проверяет VM claim, свободный target по ComputeNode UUID и свободный global slot.
 4. После admission `RUNNING` receiving compute выполняет rebuild; успешный результат проходит completion proof.
-5. `COOLDOWN` удерживает claims; после полной паузы `DONE` освобождает VM/target/slot.
+5. `COOLDOWN` удерживает claims; после полной паузы переход в `DONE` атомарно освобождает VM/target/slot.
 6. Masakari подтверждает результат по связанному operation и proof; одного статуса VM `ACTIVE` недостаточно.
 
 Это библиотека в процессах Masakari/Nova с прямым etcd v3 API, **без Tooz и без lease/TTL claims** [E-ETCD], [E-GUARD].
@@ -107,6 +109,7 @@ Operator resolve требует точной revision и внешнего под
 
 При включённом guard для `COMPUTE_HOST`, `event=STOPPED`, `host_status=NORMAL`
 Masakari API ставит hold до `notification.create()` и RPC; engine повторяет его идемпотентно до recovery [W-MASAKARI].
+Новый incident создаёт новый UUID epoch; повтор того же incident его не меняет.
 Namespace `/powerops/watcher-automation/v1` хранит state/incidents без lease/TTL [W-GATE].
 Guard ограничивает новые CONTINUOUS audits и допуски действий/rollback их планов.
 `ONESHOT`/`EVENT` маркируются manual и обходят этот guard; уже допущенное действие может позже обратиться к Nova.
@@ -123,7 +126,7 @@ Read-only `host_power_status` lock не берёт. Cleanup failure после c
 Функциональная семантика патчей проверена по исходникам; их совместимость с F в составе общего дерева не установлена.
 Источники: [M-RETURN], [M-WORKBOOK]; K `ansible/roles/mistral/files/power_ops.yaml:60–88`.
 
-## 5. Параметры ещё нужно зафиксировать
+## 5. Параметры иллюстрации и неподтверждённая конфигурация
 
 В K `enable_powerops=no`; `enable_masakari`, `enable_mistral`, `enable_ironic`, `enable_etcd` зависят от него.
 K `etc/kolla/globals.yml:918,922–925` явно включает Consul, выбирает Consul driver/`all_down` и Redis.
@@ -136,9 +139,13 @@ K default Watcher=yes сам по себе не включает Watcher guard. 
 Template использует `masakari_hostmonitor_* = 60 секунд / 1 sample`, а не соседние `masakari_consul_* = 30 / 3`.
 Источник: K `ansible/group_vars/all.yml:640–641,1111–1112`; `masakari-monitors.conf.j2:45–46`.
 
-**Предложение для исследовательского профиля:** явно задать PowerOps и оба guard включёнными, сохранить `all_down`,
-зафиксировать три независимые сети и recovery method=`auto`; отдельно исследовать отклонения.
-Это предложение для модели, **не ответ пользователя о действующих настройках** и не команда изменения кластера.
+**Композиционный исследовательский профиль HTML:** PowerOps и оба guard предполагаются включёнными,
+policy=`all_down`, recovery method=`auto`, эффективный набор сетей — `manage/tenant/storage`.
+В `normal` свежий вектор `down/down/down` разрешает recovery; в `hold` вектор `down/up/up` его запрещает.
+Для `COOLDOWN` в успешной иллюстрации задано 5 секунд; claims удерживаются весь интервал.
+Это условия иллюстрации, **не сведения о действующих настройках**, измеренные длительности или команда
+изменения кластера. Независимость отказов трёх сетей данным выбором не утверждается.
+Профили P0/P1 исходной модели SC-01 v0.1 остаются без изменения.
 
 ## 6. Изолированная проверка применимости патчей
 
@@ -163,19 +170,45 @@ Reverse ошибки: отсутствует `releasenotes/notes/powerops-post-f
 Полная цепочка с применением зависимостей не собиралась. Вторые/третьи patches Kolla отдельно не проверялись.
 Ни один PASS здесь не является доказательством совместимости композиции или её поведения во время отказа.
 
-## 7. Что требуется изменить в анимации после фиксации профиля
+## 7. Что отражает анимация композиционного профиля
 
-Текущие `HA_DRS_ANIMATION.html` и `visualizations/ha-recovery-animation.html` остаются иллюстрацией старого global-lock пути.
-Mistral, Watcher hold, durable intent, receiving-compute admission и новые claims в них не показаны.
-Сценарий P1 разрешает recovery исследовательским допущением; он не подтверждает действующую policy.
+`HA_DRS_ANIMATION.html` и `visualizations/ha-recovery-animation.html` показывают
+исследовательскую композицию архивов и P, а не собранное общее дерево исходников или deployment.
+Отдельно представлены Masakari API/engine, Nova scheduling/receiving compute, Mistral и Watcher.
+PowerOps/Tooz размещены внутри процессов Masakari/Mistral, guards — внутри Masakari/Nova;
+etcd является внешним backend. Три индикатора различают host lock, durable claims и Watcher hold.
+Запросы и ответы имеют направление, локальные события не изображаются сетевым сообщением самому себе.
 
-Для нового профиля нужны отдельные Masakari API/engine, Nova scheduling/receiving compute и два прямых guard-пути в etcd.
-В успешном финале claims и host lock освобождены, а Watcher остаётся HOLD до отдельного resume.
-Сценарии loss должны сохранять уже созданные claims и различать неизвестность наблюдателя и состояние операции.
-Потеря ответа на POST у Masakari отмечает `intent.observation=UNKNOWN`; receiving operation при этом может продолжить
-`RUNNING → COOLDOWN → DONE`. Это не равнозначно `operation.state=UNKNOWN`. Повтор нельзя разрешать только по таймеру.
-До обновления анимации следует зафиксировать флаги, method сегмента и inventory/network set в паспорте профиля.
-Далее — интеграционная копия с проверенным порядком патчей, затем формальная модель и трассы её исполнения.
+| Ключ | Что иллюстрируется |
+|---|---|
+| `normal` | API hold до notification, идемпотентный engine hold, host lock, disable → fencing/Off evidence → Nova down, intent/VM claim до POST, выбранный Nova target, receiving `WAITING` → CAS admission → `RUNNING`/rebuild → proof → `COOLDOWN` → `DONE`, подтверждение Masakari и release host lock |
+| `lost` | Fencing evidence timeout запрещает evacuation; Masakari завершает попытку ошибкой и освобождает host lock |
+| `hold` | При `all_down` свежий `down/up/up` не допускает recovery |
+| `planned` | Mistral `planned_power_off` с `require_empty` на пустом хосте держит lock одного action, проверяет условия, выключает хост и освобождает lock |
+| `contention` | Mistral ждёт host lock, которым владеет Masakari, получает timeout/`ERROR` и не отправляет power-команду |
+| `return` | Отдельный пустой источник в maintenance и пустой manifest; операторские предусловия предполагаются выполненными. Power-on action освобождает lock перед `PAUSED`; явный модельный resume ведёт к новому acquire и повторным проверкам return action |
+| `unknown` | Потеря ответа сначала даёт `intent.observation=UNKNOWN` при operation `RUNNING`; последующая ошибка completion proof даёт `operation.state=UNKNOWN` с удержанием claims и без автоматического retry |
+
+В успешном `normal` claims освобождаются атомарно при `COOLDOWN → DONE`, после полного интервала
+5 секунд, затем Masakari подтверждает результат и освобождает host lock. Watcher остаётся `BLOCKED`;
+успех HA не снимает persistent hold. `return` не является автоматическим продолжением HA:
+в `PAUSED` анимация прекращает автоматический переход и ждёт отдельной кнопки подтверждения оператора.
+На паузе action lock свободен; следующий action получает его заново.
+
+Потеря ответа на POST у Masakari отмечает `intent.observation=UNKNOWN`; receiving operation при этом
+может продолжать `RUNNING → COOLDOWN → DONE`. Неизвестность наблюдателя не равна
+`operation.state=UNKNOWN`. Сценарий `unknown` отдельно вводит ошибку completion proof;
+после неё claims сохраняются. Ни timeout, ни release host lock не разрешают автоматический retry.
+При ошибке POST Masakari не начинает polling успешного результата: отмечает failure и выполняет cleanup.
+В `unknown` принимающий compute продолжает работу независимо после освобождения host lock.
+В успешной трассе подтверждение Masakari включает Nova readback до проверки operation/proof
+и заключительную проверку Nova; одного ответа etcd недостаточно.
+
+Новые ID событий HTML независимы от переходов исходного SC-01 v0.1. Это иллюстративные трассы,
+не результаты model checker. `node --test tests/animation-traces.test.cjs` проверяет временные
+свойства их данных, а не production-код, совместимость патчей или поведение стенда.
+Для выводов о реализации ещё требуется интеграционная копия с проверенным порядком патчей,
+а для формальных выводов — исполняемая модель и трассы её проверки.
 
 ## Источники P: неизменяемые ссылки
 

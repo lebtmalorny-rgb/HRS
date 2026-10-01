@@ -43,7 +43,7 @@
     #ha-recovery-animation { max-width: 1000px; margin: 0 auto; }
     #ha-recovery-animation .ha-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; }
     #ha-recovery-animation .ha-controls { margin: 12px 0; }
-    #ha-recovery-animation .ha-event { margin-top: 14px; }
+    #ha-recovery-animation .ha-event { margin-top: 14px; min-height: 44px; }
     #ha-recovery-animation .ha-caption { margin: 8px 0; }
     #ha-recovery-animation .ha-scene { display: block; width: 100%; }
     #ha-recovery-animation .ha-scene text { font-size: 12px; font-weight: 400; fill: var(--foreground); }
@@ -62,18 +62,26 @@
     #ha-recovery-animation .ha-trace-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
     #ha-recovery-animation .ha-locks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 12px 0; }
     #ha-recovery-animation .ha-locks code { overflow-wrap: anywhere; }
+    #ha-recovery-animation .ha-caption, #ha-recovery-animation .ha-trace-meta { overflow-wrap: anywhere; }
+    #ha-recovery-animation [data-detail] { min-height: 42px; }
+    #ha-recovery-animation .ha-operator { margin: 10px 0; }
+    #ha-recovery-animation [hidden] { display: none; }
   </style>
 
   <div class="ha-top">
-    <h3>HA · Координация PowerOps</h3>
-    <span class="text-small text-muted">SC-01 · учебная анимация</span>
+    <h3>HA / PowerOps · взаимодействие компонентов</h3>
+    <span class="text-small text-muted">Архивы + mimaric · учебные трассы</span>
   </div>
   <div class="viz-controls ha-controls">
     <label class="form-label">Сценарий
       <select class="form-select" data-scenario>
-        <option value="normal">C02 · P1 · штатное восстановление</option>
-        <option value="lost">C03 · P1 · тайм-аут подтверждения Off</option>
-        <option value="hold">C01 · P0 · политика all_down</option>
+        <option value="normal">HA · восстановление с новым guard</option>
+        <option value="planned">Mistral · плановое выключение</option>
+        <option value="contention">Mistral ↔ Masakari · общий host lock</option>
+        <option value="return">Mistral · включение и возврат</option>
+        <option value="unknown">HA · неизвестный исход evacuation</option>
+        <option value="lost">HA · нет подтверждения Off</option>
+        <option value="hold">Consul · all_down запрещает recovery</option>
       </select>
     </label>
     <label class="form-label">Скорость анимации
@@ -91,9 +99,8 @@
     <button class="btn btn-ghost" type="button" data-reset>В начало</button>
   </div>
   <div class="ha-trace-meta text-small text-muted">
-    <span data-profile>P1: recovery разрешено исследовательской политикой.</span>
-    <span data-contract>PowerOps включён · auto recovery · ACTIVE → ACTIVE.</span>
-    <span>Сети: manage / tenant / storage.</span>
+    <span data-profile></span>
+    <span data-contract></span>
   </div>
   <label class="form-label">Логический кадр <output class="tabular-nums" data-count>1</output>
     <input class="form-range" data-position type="range" min="0" max="1" value="0" step="1" aria-label="Выбрать логический кадр">
@@ -104,6 +111,9 @@
   </div>
   <div class="ha-caption text-small" data-route></div>
   <div class="ha-caption text-small" data-detail></div>
+  <div class="ha-operator" data-operator-gate hidden>
+    <button class="btn" type="button" data-resume>В модели: проверка выполнена → resume</button>
+  </div>
   <svg class="ha-scene" role="img" aria-label="Схема участников HA и состояние виртуальной машины"></svg>
   <div class="ha-legend text-small" aria-label="Обозначения сообщений">
     <span><i class="ha-swatch ha-command" aria-hidden="true"></i>Команда / запрос</span>
@@ -111,142 +121,327 @@
     <span><i class="ha-swatch ha-effect" aria-hidden="true"></i>Физический эффект</span>
     <span><i class="ha-swatch ha-loss" aria-hidden="true"></i>Отказ / потеря</span>
   </div>
-  <div class="ha-locks text-small" aria-label="Блокировки: состояние backend и подтверждение для C0">
+  <div class="ha-locks text-small" aria-label="Три механизма координации">
     <div><code>powerops/host/Hsrc</code><br><span data-lock-host></span></div>
-    <div><code>powerops/evacuation/global</code><br><span data-lock-global></span></div>
+    <div><code>/powerops/watcher-automation/v1</code><br><span data-watcher></span></div>
+    <div><code>/powerops/evacuation/v1</code><br><span data-claims></span></div>
   </div>
-  <div class="ha-caption"><strong data-gate>Допуск evacuation: нет</strong></div>
-  <ul class="ha-guards text-small" data-guards aria-label="Условия модели и глобальная блокировка PowerOps"></ul>
-  <div class="ha-caption text-small text-muted">UUID-check подтверждает владение в момент проверки. Heartbeat не заменяет эту проверку и не отменяет отправленный запрос.</div>
-  <div class="ha-caption text-small text-muted">Предпосылка: после fencing изоляция Hsrc сохраняется до отдельной процедуры возврата.</div>
-  <div class="ha-caption text-small text-muted">Профиль исходников Masakari 1.0.1: global lock, без per-target guard. K — детализация координации; время условное, не измерение стенда и не результат TLC.</div>
-  <noscript>Для управления анимацией нужен JavaScript. Текстовый сценарий: HA_DRS_SCENARIO_01.md.</noscript>
+  <div class="ha-caption"><strong data-gate></strong></div>
+  <details class="text-small ha-caption"><summary>Профиль и границы иллюстрации</summary>
+    <p data-assumptions></p>
+    <p>PowerOps и оба guard предполагаются включёнными. Старый global Tooz lock заменён receiving-compute guard. Host lock сохраняется; PowerOps/Tooz и guard — библиотеки внутри сервисов.</p>
+    <p>Watcher hold не отменяет уже допущенные действия и не блокирует Mistral или ручные Nova операции. Потеря lock не отменяет отправленный запрос.</p>
+    <p>Источник: архивы + mimaric 71b0123. Совместная сборка и deployment не подтверждены. Время условное; это иллюстрация, не результат TLC или измерение стенда.</p>
+  </details>
+  <noscript>Для управления анимацией нужен JavaScript. Состав и ограничения: HA_DRS_IMPLEMENTATION_BASELINE.md.</noscript>
 
   <script>
     (() => {
       // TRACE DATA START
-      const guardLabels = {
-        owner: 'Host lock: UUID подтверждён',
-        policy: 'Политика разрешает recovery',
-        off: 'Есть актуальное Off evidence',
-        nova: 'Nova: disabled / down',
-        reconciled: 'Нет неизвестной предшествующей команды',
-        target: 'Hdst совместим и свободен — A03/A06',
-        global: 'Global lock: UUID подтверждён'
-      };
-      function buildTrace(mode) {
-        let state = {
-          world: { management: 'up', sourcePower: 'on', sourceVM: 'running', targetVM: 'absent' },
-          knowledge: { networks: 'up / up / up', power: 'unknown', nova: 'enabled / up', vmHost: 'Hsrc', vmState: 'ACTIVE', owner: 'нет' },
-          protocol: { phase: 'OBSERVING', blocked: false, quarantine: false },
-          locks: { host: 'free', global: 'free' },
-          coordination: { heartbeat: false, hostView: 'не получен', globalView: 'не получен', check: 'Нет проверок', interval: false },
-          guards: { owner: false, policy: false, off: false, nova: false, reconciled: true, target: true, global: false },
-          operations: { fence: 'NOT_SENT', evacuate: 'NOT_SENT', start: 'NOT_SENT' },
-          commandCount: { fence: 0, evacuate: 0, start: 0 }
-        };
-        const frames = [];
-        const add = (id, title, detail, patch = {}, signal = null) => {
-          for (const [key, values] of Object.entries(patch)) state[key] = { ...state[key], ...values };
-          frames.push({ id, title, detail, state: structuredClone(state), signal });
-        };
-        const signal = (from, to, kind, label, lost = false, via = []) => ({ from, to, kind, label, lost, via });
-        const finish = id => ({ id, profile: mode === 'hold' ? 'P0-ALL-DOWN' : 'P1-POWEROPS-AUTO-GLOBAL', origin: 'illustration', modelVersion: 'HA-MODEL-0.1', frames });
-        const releaseHost = () => {
-          add('K13', 'Выход из recovery: освобождение host lock', 'Завершение dispatch раскручивает контекст lock. Tooz отправляет release; это не команда включить Hsrc.',
-            {}, signal('powerops', 'etcd', 'command', 'release host lock', false, ['tooz']));
-          add('K14', 'Освобождение host lock подтверждено', 'В этой трассе release успешен. При ошибке освобождения подтверждение нельзя было бы считать полученным.',
-            { locks: { host: 'free' }, coordination: { hostView: 'освобождён', check: 'Locks отпущены' }, knowledge: { owner: 'нет' }, guards: { owner: false } },
-            signal('etcd', 'powerops', 'observation', 'release = True', false, ['tooz']));
-          add('K15', 'Tooz coordinator остановлен', 'Heartbeat прекращается после выхода из PowerOpsCoordinator. Освобождение locks не отменяет внешний эффект и не возвращает источник в работу.',
-            { coordination: { heartbeat: false } }, signal('powerops', 'tooz', 'command', 'coordinator.stop()'));
-        };
-        add('INIT', 'Начальное состояние', 'Единственный экземпляр v0 работает на Hsrc. На Hdst экземпляра ВМ нет.');
-        add('T01', 'Management-связь потеряна', 'Меняется связность мира. ВМ продолжает работать; детектор пока хранит прежнее наблюдение.',
-          { world: { management: 'down' } }, signal('source', 'detector', 'loss', 'Потеря связи', true));
-        add('T02', 'Детектор получил новые наблюдения', 'Свежий вектор down/up/up означает потерю одной из трёх наблюдаемых сетей.',
-          { knowledge: { networks: 'down / up / up' }, protocol: { phase: 'SUSPECTED' } }, signal('detector', 'detector', 'observation', 'Новые наблюдения'));
-        if (mode === 'hold') {
-          add('T03', 'all_down не разрешает recovery', 'При down/up/up политика P0 оставляет процесс в POLICY_HOLD. Fencing и evacuation не отправляются; v0 работает.',
-            { protocol: { phase: 'POLICY_HOLD' } }, signal('detector', 'detector', 'observation', 'Recovery не разрешено'));
-          return finish('C01');
-        }
-        add('T05', 'P1 разрешает рассмотреть recovery', 'Это явное исследовательское допущение: разрешающая политика и включённая PowerOps-ветка.',
-          { guards: { policy: true } }, signal('detector', 'controller', 'command', 'Уведомление'));
-        add('K01', 'PowerOps запускает Tooz coordinator', 'Оба — код внутри процесса Masakari engine. start(start_heart=True) включает фоновый heartbeat; backend — etcd3+http(s).',
-          { coordination: { heartbeat: true } }, signal('powerops', 'tooz', 'command', 'start_heart=True'));
-        add('K02', 'Tooz приобретает host lock в etcd', 'powerops/host/Hsrc охватывает весь recovery хоста. Backend уже выдал lock, но PowerOps ещё должен проверить UUID владельца.',
-          { locks: { host: 'C0' }, coordination: { hostView: 'ожидает UUID-check' } },
-          signal('powerops', 'etcd', 'command', 'acquire host lock', false, ['tooz']));
-        add('K03', 'PowerOps проверяет владение host lock', 'assert_healthy() проверяет живость heartbeat thread и выполняет etcd txn: значение ключа равно UUID lock. UUID lock — не notification_uuid.',
-          {}, signal('powerops', 'etcd', 'command', 'etcd txn: VALUE == lock UUID', false, ['tooz']));
-        add('K04 / T05', 'UUID подтверждён: recovery допущено', 'Успешный ответ etcd содержит ожидаемые key/value. Проверка владения и следующий вызов Nova/Ironic не составляют одну атомарную транзакцию.',
-          { coordination: { hostView: 'UUID подтверждён', check: 'host: OK' }, knowledge: { owner: 'C0' }, guards: { owner: true }, protocol: { phase: 'RECOVERY_ADMITTED' } },
-          signal('etcd', 'controller', 'observation', 'host UUID: OK', false, ['tooz', 'powerops']));
-        add('T06', 'Отправлен Nova disable', 'Запрет размещения запрошен. Фактическое исполнение v0 продолжается.',
-          { protocol: { phase: 'DISABLE_PENDING' } }, signal('controller', 'nova', 'command', 'disable Hsrc'));
-        add('T06 · return', 'Disable-вызов завершился без ошибки', 'Архивный путь завершает вызов disable и паузу, без отдельного readback disabled/up. Это слабее T07 модели; состояние disabled/down будет проверено после fencing.',
-          { knowledge: { nova: 'disable: принят' }, protocol: { phase: 'DISABLE_RETURNED' } },
-          signal('nova', 'controller', 'observation', 'disable: вызов завершён'));
-        add('K05', 'Фоновый heartbeat Tooz', 'Heartbeat поддерживает координацию в фоне, пока coordinator запущен. Его наличие само по себе не доказывает владение lock; это не новая UUID-проверка.',
-          {}, signal('tooz', 'etcd', 'command', 'heartbeat'));
-        add('K06', 'Перед fencing владение перепроверено', 'PowerOps вызывает assert_healthy перед fencing и через callback при ожидании стабильного Off. Здесь успешные повторные проверки укрупнены в один кадр.',
-          { coordination: { check: 'host: OK' } }, signal('etcd', 'controller', 'observation', 'Повторный UUID-check: OK', false, ['tooz', 'powerops']));
-        add('T08', 'Отправлен power-off', 'Ironic/BMC получает запрос для точного источника. Исход команды пока неизвестен контроллеру.',
-          { protocol: { phase: 'FENCE_PENDING' }, operations: { fence: 'SENT_UNKNOWN' }, commandCount: { fence: 1 }, guards: { reconciled: false } },
-          signal('controller', 'ironic', 'command', 'power-off Hsrc'));
-        add('T09', 'Источник физически выключен', 'v0 остановлен в фактическом мире. Фаза остаётся FENCE_PENDING, подтверждения Off ещё нет.',
-          { world: { sourcePower: 'off', sourceVM: 'stopped' } }, signal('ironic', 'source', 'effect', 'Питание OFF'));
-        if (mode === 'lost') {
-          add('LOSS', 'Допустимое подтверждение Off не получено', 'Источник уже выключен, но readback не дал нужного стабильного evidence до дедлайна. Одно потерянное сообщение само по себе ещё не означает завершение polling.',
-            {}, signal('ironic', 'controller', 'loss', 'Ответ потерян', true));
-          add('U01', 'Тайм-аут: попытка auto recovery завершена ошибкой', 'Исход power-off остаётся неизвестным контроллеру. BLOCKED — обозначение модели; архивный flow завершается ошибкой, без автоматического U02 resume или power-on.',
-            { protocol: { blocked: true } }, signal('controller', 'controller', 'loss', 'Timeout'));
-          releaseHost();
-          return finish('C03');
-        }
-        add('T10', 'Получено допустимое подтверждение Off', 'Последовательные readback и корреляция приняты по допущениям модели. Источник остаётся в карантине.',
-          { knowledge: { power: 'off' }, protocol: { phase: 'SOURCE_ISOLATED', blocked: false, quarantine: true }, guards: { off: true, reconciled: true }, operations: { fence: 'CONFIRMED' } },
-          signal('ironic', 'controller', 'observation', 'Off evidence'));
-        add('T11', 'Запрошено состояние Nova service', 'Одного Off evidence недостаточно: контроллер отдельно проверяет disabled/down.',
-          {}, signal('controller', 'nova', 'command', 'Чтение service'));
-        add('T11', 'Nova подтвердила disabled/down', 'Теперь подтверждены изоляция и состояние сервиса. Глобальный evacuation lock ещё предстоит получить; резерв Hdst задан допущением модели.',
-          { knowledge: { nova: 'disabled / down' }, protocol: { phase: 'SOURCE_DOWN_CONFIRMED' }, guards: { nova: true } },
-          signal('nova', 'controller', 'observation', 'disabled / down'));
-        add('K07', 'Перед ВМ приобретается global evacuation lock', 'powerops/evacuation/global сериализует участвующие recovery в общем backend/namespace. Это не reservation Hdst и не per-target guard; совместимость и резерв Hdst заданы A03/A06.',
-          { locks: { global: 'C0' }, coordination: { globalView: 'ожидает UUID-check' } },
-          signal('powerops', 'etcd', 'command', 'acquire global lock', false, ['tooz']));
-        add('K08', 'Проверены UUID обеих блокировок', 'assert_healthy проверяет каждый active lock: host и global. Nova VM lock/reset/evacuate и выбранные проверки результата также защищены вызовами assert_healthy.',
-          { coordination: { globalView: 'UUID подтверждён', check: 'host + global: OK' }, guards: { global: true } },
-          signal('etcd', 'controller', 'observation', 'host + global UUID: OK', false, ['tooz', 'powerops']));
-        add('T12', 'Отправлена evacuation', 'В методе auto target не передаётся: назначение выбирает Nova. В этой трассе им станет Hdst. Приём запроса ещё не означает восстановления ВМ.',
-          { protocol: { phase: 'EVAC_PENDING' }, operations: { evacuate: 'SENT_UNKNOWN' }, commandCount: { evacuate: 1 } },
-          signal('controller', 'nova', 'command', 'evacuate V · выбор Nova'));
-        add('T13', 'На Hdst восстановлен и запущен v1', 'Профиль архивной ветки для исходно ACTIVE ВМ: evacuation возвращает её в ACTIVE. Отдельного start здесь нет; наблюдение C0 пока указывает Hsrc.',
-          { world: { targetVM: 'running' } }, signal('nova', 'target', 'effect', 'v1 работает'));
-        add('T14', 'Nova подтвердила результат evacuation', 'Новый host отличается от источника, task_state=None, vm_state=active. Polling, финальная сверка и VM unlock укрупнены; host и global locks всё ещё удерживаются.',
-          { knowledge: { vmHost: 'Hdst', vmState: 'ACTIVE' }, operations: { evacuate: 'CONFIRMED' } },
-          signal('nova', 'controller', 'observation', 'Hdst · ACTIVE · task=None'));
-        add('K09', 'После evacuation владение перепроверено', 'Перед evacuation_interval PowerOps вновь проверяет heartbeat thread и UUID обоих удерживаемых locks.',
-          {}, signal('etcd', 'controller', 'observation', 'host + global UUID: OK', false, ['tooz', 'powerops']));
-        add('K10', 'evacuation_interval — global lock ещё занят', 'Пауза находится внутри контекста global lock. В этой успешной трассе владение сохраняется: другая эвакуация ждёт освобождения. Heartbeat продолжает работать; потеря lease — отдельный сценарий.',
-          { coordination: { interval: true } }, signal('controller', 'controller', 'command', 'evacuation_interval'));
-        add('K11', 'Интервал окончен: release global lock', 'Host lock продолжает охватывать recovery источника. Для следующей ВМ global lock нужно было бы приобрести заново.',
-          { coordination: { interval: false } }, signal('powerops', 'etcd', 'command', 'release global lock', false, ['tooz']));
-        add('K12', 'Освобождение global lock подтверждено', 'В этой трассе release успешен. Доступ к глобальной очереди освобождён; это не сигнал включить исходный хост.',
-          { locks: { global: 'free' }, coordination: { globalView: 'освобождён', check: 'host: OK' }, guards: { global: false } },
-          signal('etcd', 'powerops', 'observation', 'release = True', false, ['tooz']));
-        add('T18', 'Объявлено восстановление исполнения ВМ', 'Единственный работающий экземпляр — v1 на Hdst; Hsrc остаётся выключенным и в карантине. Готовность приложения здесь не проверяется.',
-          { protocol: { phase: 'VM_RECOVERED' } }, signal('controller', 'controller', 'observation', 'VM_RECOVERED'));
-        releaseHost();
-        return finish('C02');
-      }
-      const traces = { normal: buildTrace('normal'), lost: buildTrace('lost'), hold: buildTrace('hold') };
+// Source-based illustrative traces. Timings are illustrative; no deployment is asserted.
+function compositeState(patch = {}) {
+  const state = {
+    world: { networks: 'up / up / up', sourcePower: 'on', sourceVM: 'running', targetVM: 'absent' },
+    knowledge: { networks: 'up / up / up', power: 'unknown', nova: 'enabled / up', vmHost: 'Hsrc', vmState: 'ACTIVE' },
+    protocol: { phase: 'OBSERVING', blocked: false, quarantine: false },
+    host: { owner: 'none', confirmed: false, heartbeat: false, view: 'свободен' },
+    watcher: { state: 'READY', epoch: 'E0', action: 'IDLE' },
+    evacuation: { intent: 'NONE', observation: 'NONE', operation: 'NONE', vmClaim: false, targetClaim: false, slotClaim: false, proof: false, submitted: false },
+    mistral: { workflow: 'IDLE', action: '—', waiting: false },
+    counts: { fence: 0, evacuate: 0, powerOn: 0 }
+  };
+  for (const [key, values] of Object.entries(patch)) state[key] = { ...state[key], ...values };
+  return state;
+}
+
+function compositeSignal(from, to, kind, label, options = {}) {
+  return { from, to, kind, label, via: [], lost: false, ...options };
+}
+
+function compositeLocal(actor, label, localType = 'check', folded) {
+  return compositeSignal(actor, actor, 'observation', label, { localType, ...(folded ? { folded } : {}) });
+}
+
+function compositeBuilder(mode, patch = {}) {
+  let state = compositeState(patch);
+  const frames = [];
+  const add = (id, title, detail, delta = {}, signal = null, extra = {}) => {
+    for (const [key, values] of Object.entries(delta)) state[key] = { ...state[key], ...values };
+    frames.push({ id: `${mode}-${id}`, title, detail, state: structuredClone(state), signal, ...extra });
+  };
+  const acquire = (prefix, actor, owner, action) => {
+    add(`${prefix}-request`, 'Запрошен host lock', `PowerOps и Tooz работают внутри ${owner}. Общие backend, namespace и каноническое имя Hsrc задают один lock. ${action}`,
+      { host: { heartbeat: true, view: 'acquire ожидается' } }, compositeSignal(actor, 'etcd', 'command', 'Tooz: acquire host/Hsrc'));
+    add(`${prefix}-acquired`, 'Host lock получен', 'Backend вернул успешный acquire. Следом нужна проверка heartbeat и UUID владения; UUID lock не равен ID notification/action.',
+      { host: { owner, confirmed: false, view: 'получен; UUID ещё не проверен' } }, compositeSignal('etcd', actor, 'observation', 'acquire: успешно'));
+    add(`${prefix}-check`, 'Проверяется владение', 'assert_healthy() проверяет heartbeat thread и соответствие значения ключа UUID текущего lock.',
+      {}, compositeSignal(actor, 'etcd', 'command', 'Tooz: UUID-check'));
+    add(`${prefix}-confirmed`, 'Владение подтверждено', 'Успешная проверка разрешает следующий шаг. Проверка lock и внешний API-вызов не составляют одну атомарную транзакцию.',
+      { host: { confirmed: true, view: 'UUID подтверждён; heartbeat жив' }, ...(owner === 'Masakari' ? { protocol: { phase: 'RECOVERY_ADMITTED' } } : {}) }, compositeSignal('etcd', actor, 'observation', 'host UUID: OK'));
+  };
+  const release = (prefix, actor, detail, delta = {}) => {
+    add(`${prefix}-request`, 'Освобождение host lock', detail, {}, compositeSignal(actor, 'etcd', 'command', 'Tooz: release host/Hsrc'));
+    add(`${prefix}-confirmed`, 'Host lock освобождён', 'Release успешен, coordinator завершён, heartbeat остановлен. Освобождение lock не отменяет отправленные внешние команды.',
+      { ...delta, host: { owner: 'none', confirmed: false, heartbeat: false, view: 'освобождён' } }, compositeSignal('etcd', actor, 'observation', 'release: успешно'));
+  };
+  const finish = (contract, assumptions = []) => ({
+    id: `COMPOSITE-${mode.toUpperCase()}`,
+    profile: 'Архивы + mimaric · PowerOps + Watcher guard + evacuation guard',
+    contract,
+    assumptions: [
+      'Иллюстрация по исходникам: совместимая сборка и deployment не подтверждены.',
+      'PowerOps и оба guard предполагаются включёнными; общий etcd и canonical host Hsrc.',
+      'Namespaces и согласованные настройки подготовлены. Начальный READY Watcher предполагает ранее выполненный оператором resume; initialize сам создаёт BLOCKED.',
+      'E0/E1 — условные обозначения UUID epoch Watcher, не числовой счётчик. Новый incident меняет epoch; повтор того же incident идемпотентен.',
+      'all_down; три независимые enabled+masakari_monitor сети; recovery method=auto.',
+      'Admission: max_parallel=3, один receiving ComputeNode UUID за раз; cooldown=5 с. Время анимации условное.',
+      'Guard встроен в Masakari/Nova, PowerOps/Tooz — в Masakari/Mistral; отдельных daemon нет.',
+      ...assumptions
+    ],
+    frames
+  });
+  return { add, acquire, release, finish };
+}
+
+function buildCompositeRecovery(mode) {
+  const { add, acquire, release, finish } = compositeBuilder(mode);
+  add('init', 'Одна ВМ на источнике', 'v0 работает на Hsrc; на Hdst экземпляра нет. Mistral исполняет отдельные плановые workflows и не входит в аварийный TaskFlow.');
+  const networks = mode === 'hold' ? 'down / up / up' : 'down / down / down';
+  add('network-loss', mode === 'hold' ? 'Потеря одной сети' : 'Потеря трёх наблюдаемых сетей', 'Изменилась связность мира. Потеря связи не доказывает остановку ВМ: v0 всё ещё работает.',
+    { world: { networks } }, compositeSignal('source', 'detector', 'loss', networks, { lost: true }));
+  add('network-observation', 'Детектор обновил наблюдения', `Эффективный набор содержит три сети: ${networks}. Политика all_down проверяется по этому набору.`,
+    { knowledge: { networks }, protocol: { phase: 'SUSPECTED' } }, compositeLocal('detector', 'Проверка all_down'));
+  if (mode === 'hold') {
+    add('policy-hold', 'all_down не разрешает recovery', 'Две сети доступны. Notification о полном отказе не создаётся; fencing, evacuation и Watcher hold в этой трассе не начинаются.',
+      { protocol: { phase: 'POLICY_HOLD' } }, compositeLocal('detector', 'POLICY_HOLD'));
+    return finish('При down/up/up all_down сохраняет наблюдение без recovery.');
+  }
+  add('notification', 'Уведомление поступило в Masakari API', 'COMPUTE_HOST / STOPPED / host_status=NORMAL. API должен установить persistent Watcher hold до notification.create() и передачи в engine.',
+    { protocol: { phase: 'API_HOLD_PENDING' } }, compositeSignal('detector', 'api', 'command', 'COMPUTE_HOST: STOPPED'));
+  add('api-hold-request', 'API записывает Watcher hold', 'Прямой durable guard в etcd: incident и BLOCKED сохраняются без lease/TTL. Это отдельный gate для CONTINUOUS automation.',
+    {}, compositeSignal('api', 'etcd', 'command', 'Watcher hold: incident + BLOCKED'));
+  add('api-hold-confirmed', 'Watcher hold сохранён с новым epoch', 'Успешный ответ позволяет API создать notification и отправить RPC. Новый incident меняет UUID epoch: условно E0 → E1. Resume здесь не выполняется.',
+    { watcher: { state: 'BLOCKED', epoch: 'E1' } }, compositeSignal('etcd', 'api', 'observation', 'hold: BLOCKED, новый epoch E1'));
+  add('engine-notification', 'Notification передана в engine', 'Только после hold API создаёт notification и вызывает аварийный TaskFlow Masakari.',
+    { protocol: { phase: 'ENGINE_HOLD_PENDING' } }, compositeSignal('api', 'controller', 'command', 'notification.create → RPC recovery'));
+  add('engine-hold-request', 'Engine повторяет hold', 'Повтор по тому же incident идемпотентен. Recovery начинается после подтверждения persistent gate.',
+    {}, compositeSignal('controller', 'etcd', 'command', 'Watcher hold: тот же incident'));
+  add('engine-hold-confirmed', 'Идемпотентный hold подтверждён', 'Watcher остаётся BLOCKED. Gate не блокирует Mistral и не отменяет уже допущенные внешние действия.',
+    { protocol: { phase: 'HOST_ACQUIRE_PENDING' } }, compositeSignal('etcd', 'controller', 'observation', 'hold: уже установлен'));
+  add('watcher-admission', 'Watcher проверяет новое автоматическое действие', 'Новый action плана CONTINUOUS audit проверяет gate; ручные ONESHOT/EVENT имеют другую границу допуска.',
+    {}, compositeSignal('watcher', 'etcd', 'command', 'CONTINUOUS action: admission'));
+  add('watcher-denied', 'Новое действие Watcher не допущено', 'BLOCKED запрещает новый автоматический action. Уже допущенное ранее действие этим чтением не отменяется.',
+    { watcher: { action: 'DENIED' } }, compositeSignal('etcd', 'watcher', 'observation', 'BLOCKED: action DENIED'));
+  acquire('host', 'controller', 'Masakari', 'Здесь lock охватывает весь recovery Hsrc.');
+  if (mode === 'contention') {
+    add('mistral-start', 'Оператор запускает плановый action', 'Mistral planned_power_off обращается к тому же host lock. Авторизация и корректность входов предполагаются подтверждёнными.',
+      { mistral: { workflow: 'RUNNING', action: 'planned_power_off', waiting: true } }, compositeSignal('operator', 'mistral', 'command', 'planned_power_off Hsrc'));
+    add('mistral-acquire', 'Mistral пробует acquire', 'Host lock принадлежит Masakari. Watcher hold здесь не является причиной отказа: конкуренция идёт за Tooz host lock.',
+      {}, compositeSignal('mistral', 'etcd', 'command', 'Tooz: acquire host/Hsrc'));
+    add('mistral-busy', 'Backend сообщает: host занят', 'Владение не передано; Mistral не выполняет maintenance, Nova disable или Ironic power-вызов.',
+      {}, compositeSignal('etcd', 'mistral', 'observation', 'acquire: занят Masakari'));
+    add('mistral-wait', 'Mistral ждёт освобождения', 'Ожидание с повторными acquire ограничено дедлайном; фактическая длительность в анимации условная.',
+      {}, compositeLocal('mistral', 'Ожидание host lock', 'wait', 'Повторные acquire укрупнены.'));
+    add('mistral-timeout', 'Action завершён ошибкой lock timeout', 'Дедлайн истёк: workflow ERROR. Последующее освобождение host lock не повторит этот action автоматически.',
+      { mistral: { workflow: 'ERROR', waiting: false } }, compositeLocal('mistral', 'Host lock timeout', 'timeout'));
+  }
+  add('disable-request', 'Masakari запрещает размещение на Hsrc', 'Nova disable отправлен под host lock. В архивном пути отдельный readback disabled/up до fencing не гарантирован.',
+    { protocol: { phase: 'DISABLE_PENDING' } }, compositeSignal('controller', 'nova', 'command', 'disable Hsrc'));
+  add('disable-return', 'Disable-вызов завершился', 'Вызов завершён без ошибки; v0 всё ещё работает. disabled/down будет отдельно прочитан после подтверждения Off.',
+    { knowledge: { nova: 'disable: вызов завершён' } }, compositeSignal('nova', 'controller', 'observation', 'disable: успешно'));
+  add('fence-request', 'Отправлен power-off источника', 'Перед вызовом и во время polling выполняются assert_healthy; успешные повторы укрупнены. Ironic адресует точный BMC источника.',
+    { protocol: { phase: 'FENCE_PENDING' }, counts: { fence: 1 } }, compositeSignal('controller', 'ironic', 'command', 'power-off Hsrc', { folded: 'Heartbeat и повторные UUID-check перед power-off/polling.' }));
+  add('fence-effect', 'Источник физически выключен', 'v0 остановлен в фактическом мире. Masakari ещё не получил допустимое подтверждение Off.',
+    { world: { sourcePower: 'off', sourceVM: 'stopped' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание OFF'));
+  add('off-read-request', 'Запрошен readback питания', 'Успех команды не заменяет стабильное наблюдение power off; polling проверяет состояние Ironic и здоровье координации.',
+    {}, compositeSignal('controller', 'ironic', 'command', 'Чтение стабильного Off'));
+  if (mode === 'lost') {
+    add('off-evidence-loss', 'Подтверждение Off не доставлено', 'В мире источник выключен, но Masakari не получил допустимого evidence. Кадр представляет потерю ответов до дедлайна polling.',
+      {}, compositeSignal('ironic', 'controller', 'loss', 'Off evidence: потеря', { lost: true }));
+    add('off-timeout', 'Fencing timeout: recovery остановлен', 'Power остаётся unknown у наблюдателя. Evacuation не отправлялась, durable claims не создавались; физический power-off не повторяется автоматически.',
+      { protocol: { phase: 'FENCE_UNKNOWN', blocked: true, quarantine: true } }, compositeLocal('controller', 'Нет evidence до дедлайна', 'timeout'));
+    release('host-release', 'controller', 'Ошибка выходит из recovery и освобождает host lock. Watcher hold остаётся; это не разрешение evacuation или power-on.');
+    return finish('Без Off evidence evacuation запрещена; host lock освобождается при выходе, Watcher hold сохраняется.');
+  }
+  add('off-confirmed', 'Стабильное Off подтверждено', 'Допустимый readback получен. Источник остаётся выключенным; это необходимое, но ещё не достаточное условие dispatch.',
+    { knowledge: { power: 'off' }, protocol: { phase: 'SOURCE_ISOLATED', quarantine: true } }, compositeSignal('ironic', 'controller', 'observation', 'power off: подтверждено'));
+  add('nova-down-request', 'Запрошено состояние Nova service', 'Masakari ждёт disabled/down после fencing. Это отдельная проверка от чтения power state.',
+    {}, compositeSignal('controller', 'nova', 'command', 'Чтение Hsrc service'));
+  add('nova-down-confirmed', 'Nova подтвердила disabled/down', 'Теперь разрешено создание evacuation intent. Новый admission заменяет прежний global Tooz lock; host lock сохраняется.',
+    { knowledge: { nova: 'disabled / down' }, protocol: { phase: 'DISPATCH_READY' } }, compositeSignal('nova', 'controller', 'observation', 'Hsrc: disabled / down'));
+  add('intent-request', 'Masakari сохраняет intent до POST', 'Прямой etcd CAS создаёт SUBMITTING, request ID и VM claim атомарно. Повторный dispatch этой ВМ не должен обойти запись.',
+    {}, compositeSignal('controller', 'etcd', 'command', 'CAS: intent + request ID + VM claim'));
+  add('intent-confirmed', 'Durable intent и VM claim сохранены', 'Evacuate ещё не отправлен. Claims не имеют lease/TTL; таймер сам по себе их не освобождает.',
+    { evacuation: { intent: 'SUBMITTING', vmClaim: true } }, compositeSignal('etcd', 'controller', 'observation', 'SUBMITTING + VM claim: OK'));
+  add('evacuate-post', 'Masakari отправляет POST evacuate', 'Метод auto: target не передаётся. Request ID связывает intent с будущей migration; команда отправляется ровно один раз.',
+    { evacuation: { submitted: true }, counts: { evacuate: 1 }, protocol: { phase: 'EVACUATION_SUBMITTED' } }, compositeSignal('controller', 'nova', 'command', 'POST evacuate V · request ID'));
+  if (mode !== 'unknown') {
+    add('evacuate-accepted', 'Nova приняла запрос', 'Принятие POST не доказывает rebuild или восстановление. Masakari будет ждать связанный operation и completion proof.',
+      {}, compositeSignal('nova', 'controller', 'observation', 'POST evacuate: принят'));
+  }
+  add('nova-selection', 'Nova выбрала Hdst', 'Scheduler выбирает назначение; guard не заменяет scheduling/Placement. RPC направляется receiving nova-compute для выбранного ComputeNode UUID.',
+    {}, compositeSignal('nova', 'compute', 'command', 'rebuild V → Hdst'));
+  add('waiting-request', 'Receiving compute регистрирует WAITING', 'Библиотека guard в nova-compute проверяет migration/source/target/request ID. Register связывает intent (его запись становится BOUND) с migration; rebuild ещё не начат.',
+    {}, compositeSignal('compute', 'etcd', 'command', 'CAS: register migration WAITING'));
+    add('waiting-confirmed', 'Operation WAITING сохранён', 'VM claim связан с migration, intent перешёл из SUBMITTING в BOUND. Target и slot ещё свободны; receiving rebuild не начат.',
+    { evacuation: { intent: 'BOUND', operation: 'WAITING' } }, compositeSignal('etcd', 'compute', 'observation', 'BOUND + WAITING: зарегистрированы'));
+  add('admission-request', 'Receiving compute запрашивает admission', 'Один CAS проверяет VM claim, свободный target по ComputeNode UUID и свободный слот из трёх. Выполнение до успеха CAS запрещено.',
+    {}, compositeSignal('compute', 'etcd', 'command', 'CAS: VM + target + slot 1/3'));
+  add('admission-confirmed', 'Operation RUNNING допущен', 'VM/target/slot claims удерживаются. Перед локальным rebuild compute повторяет проверку pending migration и дедлайна; успешные локальные проверки укрупнены.',
+    { evacuation: { operation: 'RUNNING', targetClaim: true, slotClaim: true } }, compositeSignal('etcd', 'compute', 'observation', 'RUNNING: admission OK', { folded: 'Повтор pending/deadline checks в receiving compute.' }));
+  if (mode === 'unknown') {
+    add('post-reply-loss', 'Masakari потерял ответ POST', 'Nova уже допустила выполнение. Потеря ответа меняет знание отправителя, но сама по себе не переводит receiving operation в UNKNOWN.',
+      {}, compositeSignal('nova', 'controller', 'loss', 'Ответ POST потерян', { lost: true }));
+    add('observation-unknown-request', 'Masakari сохраняет неизвестный исход POST', 'note_intent_unknown записывает observation=UNKNOWN. Operation остаётся RUNNING; повторный POST не отправляется.',
+      {}, compositeSignal('controller', 'etcd', 'command', 'CAS: intent.observation=UNKNOWN'));
+    add('observation-unknown-confirmed', 'UNKNOWN наблюдателя сохранён', 'Ошибка POST завершает попытку Masakari. Observation UNKNOWN и operation RUNNING — разные факты; receiving compute продолжает ранее допущенную операцию.',
+      { evacuation: { observation: 'UNKNOWN' }, protocol: { phase: 'POST_FAILED', blocked: true } }, compositeSignal('etcd', 'controller', 'observation', 'observation UNKNOWN; operation RUNNING'));
+    add('post-failure-cleanup', 'Masakari завершает неуспешную попытку', 'VMove отмечается FAILED, выполняется cleanup. Polling успешного результата после ошибки POST не начинается. В трассе одна ВМ; других submission workers ожидать не нужно.',
+      {}, compositeLocal('controller', 'FAILED → cleanup', 'check', 'VMove update и Nova unlock укрупнены.'));
+    release('host-release', 'controller', 'В этой трассе Masakari выходит до завершения receiving compute. Host lock освобождается, durable claims и Watcher hold сохраняются.');
+  }
+  add('rebuild-effect', 'Receiving compute восстановил ВМ', 'Локальный rebuild запустил v1 на Hdst. v0 остаётся остановленным на выключенном Hsrc; физический результат ещё не равен подтверждённому recovery.',
+    { world: { targetVM: 'running' } }, compositeSignal('compute', 'target', 'effect', 'Локальный rebuild: v1 работает'));
+  if (mode === 'unknown') {
+    add('proof-error', 'Completion proof получить не удалось', 'Отдельная ошибка после допущенного rebuild не позволяет проверить migration=done, точные VM/target и terminal task_state. Наличие работающей v1 этого не заменяет.',
+      {}, compositeLocal('compute', 'Ошибка получения completion proof'));
+    add('operation-unknown-request', 'Compute сохраняет operation UNKNOWN', 'Обработчик ошибки после admission вызывает mark_unknown. Он сохраняет VM, target и slot claims; это не эффект потери ответа POST.',
+      {}, compositeSignal('compute', 'etcd', 'command', 'CAS: RUNNING → UNKNOWN, claims сохраняются'));
+    add('operation-unknown-confirmed', 'Operation UNKNOWN сохранён', 'Теперь UNKNOWN относится и к observation Masakari, и отдельно к execution record. Proof отсутствует, автоматический retry запрещён.',
+      { evacuation: { operation: 'UNKNOWN' } }, compositeSignal('etcd', 'compute', 'observation', 'UNKNOWN; VM/target/slot удержаны'));
+    return finish('Потеря observation и operation UNKNOWN показаны отдельно; после admission claims сохраняются до доказанного разрешения исхода.');
+  }
+  add('proof-request', 'Compute передаёт completion proof', 'Проверены migration=done, vm_uuid, target_uuid/host, vm_state=active и task_state=None. Guard.complete валидирует proof перед CAS.',
+    {}, compositeSignal('compute', 'etcd', 'command', 'CAS: proof + RUNNING → COOLDOWN', { folded: 'Локальная проверка точного completion proof перед CAS.' }));
+  add('cooldown-confirmed', 'COOLDOWN: proof сохранён, claims заняты', 'ВМ уже ACTIVE на Hdst, но recovery ещё не подтверждён. VM/target/slot удерживаются на всём cooldown.',
+    { evacuation: { operation: 'COOLDOWN', proof: true } }, compositeSignal('etcd', 'compute', 'observation', 'COOLDOWN + completion proof'));
+  add('cooldown-wait', 'Полная пауза cooldown', 'Иллюстративный параметр — 5 секунд. Это локальное ожидание receiving compute; в анимации оно не изображает сетевой пакет.',
+    {}, compositeLocal('compute', 'cooldown = 5 с', 'wait'));
+  add('done-request', 'Compute завершает cooldown', 'CAS проверяет точную revision и claims, затем атомарно сохраняет DONE и удаляет VM/target/slot claims.',
+    {}, compositeSignal('compute', 'etcd', 'command', 'CAS: DONE + release VM/target/slot'));
+  add('done-confirmed', 'DONE и освобождение claims подтверждены', 'Slot снова доступен контуру, Hdst допускает следующую guarded evacuation. Host lock Masakari всё ещё удерживается.',
+    { evacuation: { operation: 'DONE', vmClaim: false, targetClaim: false, slotClaim: false } }, compositeSignal('etcd', 'compute', 'observation', 'DONE; claims освобождены'));
+  add('masakari-nova-read', 'Masakari читает состояние ВМ из Nova', 'Polling проверяет host, ожидаемый vm_state и task_state. В этой трассе успешное чтение происходит после DONE; возможные предшествующие чтения свёрнуты.',
+    {}, compositeSignal('controller', 'nova', 'command', 'GET server V · host/state/task'));
+  add('masakari-nova-observed', 'Nova показывает ВМ на Hdst', 'Новый host отличается от Hsrc, vm_state=ACTIVE, task_state=None. Одного этого результата ещё недостаточно: требуется совпадающий operation/proof.',
+    { knowledge: { vmHost: 'Hdst', vmState: 'ACTIVE' } }, compositeSignal('nova', 'controller', 'observation', 'Hdst · ACTIVE · task=None'));
+  add('masakari-result-read', 'Masakari читает связанный результат', 'Dispatch проверяет operation, связанный с intent/request ID, и completion proof. Один статус ACTIVE без этого результата недостаточен.',
+    {}, compositeSignal('controller', 'etcd', 'command', 'Чтение operation + proof'));
+  add('masakari-result-matched', 'DONE и proof совпали с Nova readback', 'Attempt.confirmed сопоставил запись operation с прочитанными host/vm_state. Далее код ещё раз читает Nova для заключительной проверки.',
+    {}, compositeSignal('etcd', 'controller', 'observation', 'DONE + matching proof'));
+  add('masakari-final-nova-read', 'Заключительная проверка Nova', 'После ожидания Masakari заново получает ВМ и проверяет назначение, vm_state и task_state перед VMove SUCCEEDED.',
+    {}, compositeSignal('controller', 'nova', 'command', 'GET server V · final verify'));
+  add('masakari-result-confirmed', 'Восстановление ВМ подтверждено', 'Финальный readback совпал с ожидаемым результатом и уже проверенным proof. Готовность приложения и безопасный возврат старых доменов отдельно не проверялись.',
+    { evacuation: { observation: 'CONFIRMED' }, protocol: { phase: 'VM_RECOVERED' } }, compositeSignal('nova', 'controller', 'observation', 'Hdst · ACTIVE · task=None: confirmed'));
+  release('host-release', 'controller', 'Recovery завершён; освобождается host lock Hsrc. Источник остаётся Off, Watcher BLOCKED; автоматического power-on или resume нет.');
+  return finish(mode === 'contention'
+    ? 'Masakari завершает recovery; конкурентный action Mistral остаётся ERROR без power-вызова и автоматического retry.'
+    : 'DONE освобождает durable claims; после recovery освобождён host lock, источник Off, Watcher BLOCKED.');
+}
+
+function buildCompositePlanned() {
+  const { add, acquire, release, finish } = compositeBuilder('planned', {
+    world: { sourceVM: 'absent', targetVM: 'running' },
+    knowledge: { power: 'on', vmHost: 'Hdst', vmState: 'ACTIVE' }
+  });
+  add('init', 'Пустой Hsrc готовится к плановому выключению', 'Это самостоятельный сценарий: на Hsrc нет ВМ или старых доменов, V уже работает на Hdst. Политика require_empty; stopped manifest = [].');
+  add('start', 'Оператор запускает planned_power_off', 'Авторизация PowerOps и корректные canonical host/segment предполагаются проверенными. Один composite action охватит переход.',
+    { mistral: { workflow: 'RUNNING', action: 'planned_power_off' }, protocol: { phase: 'PLANNED_POWER_OFF' } }, compositeSignal('operator', 'mistral', 'command', 'planned_power_off · require_empty'));
+  acquire('host', 'mistral', 'Mistral', 'Lock принадлежит одному action planned_power_off.');
+  add('resolve', 'Проверено соответствие ресурсов Hsrc', 'Точные Ironic node, Nova compute service и Masakari host в segment разрешены. Успешные read-only запросы укрупнены; это не смена power state.',
+    {}, compositeLocal('mistral', 'resolve_host_set: OK', 'check', 'Чтение Ironic, Nova и Masakari identity.'));
+  add('maintenance-request', 'Хост переводится в maintenance', 'Mistral просит Masakari API включить maintenance перед плановым выключением.',
+    {}, compositeSignal('mistral', 'api', 'command', 'Hsrc: maintenance=true'));
+  add('maintenance-confirmed', 'Maintenance подтверждён', 'Readback подтверждает maintenance=true; так плановое обслуживание отделяется от нормального host recovery.',
+    { protocol: { phase: 'MAINTENANCE_CONFIRMED', quarantine: true } }, compositeSignal('api', 'mistral', 'observation', 'maintenance=true'));
+  add('disable-request', 'Mistral отключает Nova service', 'Новые размещения на Hsrc запрещаются под тем же action lock.',
+    {}, compositeSignal('mistral', 'nova', 'command', 'disable Hsrc'));
+  add('disable-confirmed', 'Nova disabled подтверждён', 'Primitive проверяет административный статус после disable. Хост пока включён.',
+    { knowledge: { nova: 'disabled / up' } }, compositeSignal('nova', 'mistral', 'observation', 'Hsrc: disabled / up'));
+  add('empty-request', 'Проверяется require_empty', 'Nova inventory и повторная проверка безопасного выключения должны подтвердить отсутствие ВМ на Hsrc. Здесь manifest пуст.',
+    {}, compositeSignal('mistral', 'nova', 'command', 'Список ВМ Hsrc + safety readback'));
+  add('empty-confirmed', 'Пустой хост подтверждён', 'require_empty выполнен, stopped_instance_ids=[]. Evacuation в planned_power_off не запускается.',
+    {}, compositeSignal('nova', 'mistral', 'observation', 'Hsrc instances=[]'));
+  add('power-off', 'Отправлен плановый power-off', 'Проверки heartbeat/UUID продолжаются внутри action. allow_hard_off=false; аварийное жёсткое выключение здесь не требуется.',
+    { counts: { fence: 1 }, protocol: { phase: 'PLANNED_OFF_PENDING' } }, compositeSignal('mistral', 'ironic', 'command', 'Плановый power-off Hsrc'));
+  add('power-effect', 'Питание Hsrc выключено', 'На Hsrc не было ВМ. Работа V на Hdst продолжается.',
+    { world: { sourcePower: 'off' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание OFF'));
+  add('off-read', 'Mistral проверяет состояние питания', 'Primitive ждёт стабильный power off, отсутствие target transition и Ironic last_error; повторы polling укрупнены.',
+    {}, compositeSignal('mistral', 'ironic', 'command', 'Чтение стабильного Off'));
+  add('off-confirmed', 'Плановое выключение подтверждено', 'Power off подтверждён. Maintenance сохраняется, Nova остаётся disabled; stopped manifest пуст.',
+    { knowledge: { power: 'off', nova: 'disabled / последнее up' }, protocol: { phase: 'PLANNED_OFF_CONFIRMED' } }, compositeSignal('ironic', 'mistral', 'observation', 'power off: подтверждено'));
+  add('action-complete', 'Action завершил проверки', 'Финальный assert_healthy и success audit выполнены. Подтверждённая физическая операция не повторяется из-за возможной ошибки cleanup.',
+    {}, compositeLocal('mistral', 'planned_power_off: completed', 'check', 'Финальный UUID-check и audit укрупнены.'));
+  release('host-release', 'mistral', 'Граница одного composite action: после подтверждённого Off lock освобождается.',
+    { mistral: { workflow: 'SUCCESS' }, protocol: { phase: 'PLANNED_OFF_DONE' } });
+  return finish('Плановое выключение пустого Hsrc: maintenance=true, Nova disabled, Off подтверждён, action lock освобождён.', [
+    'Самостоятельный пустой источник: sourceVM=absent, stopped_instance_ids=[].',
+    'Watcher READY остаётся READY: плановый action не является incident host-failure.'
+  ]);
+}
+
+function buildCompositeReturn() {
+  const { add, acquire, release, finish } = compositeBuilder('return', {
+    world: { sourcePower: 'off', sourceVM: 'absent', targetVM: 'running' },
+    knowledge: { power: 'off', nova: 'disabled / down', vmHost: 'Hdst', vmState: 'ACTIVE' },
+    protocol: { phase: 'MAINTENANCE', quarantine: true },
+    watcher: { state: 'BLOCKED', epoch: 'E1' }
+  });
+  add('init', 'Самостоятельный возврат пустого Hsrc', 'Это не автоматическое продолжение HA. Заданы отдельные условия: Hsrc пуст, старых доменов нет, maintenance=true, Nova disabled, stopped manifest=[]. Watcher уже BLOCKED отдельным incident.');
+  add('start', 'Оператор запускает power_on_and_return', 'Первый action — power_on_for_inspection. Авторизация и входные данные проверены; безопасное включение пустого источника задано предпосылкой.',
+    { mistral: { workflow: 'RUNNING', action: 'power_on_for_inspection' }, protocol: { phase: 'INSPECTION_POWER_ON' } }, compositeSignal('operator', 'mistral', 'command', 'power_on_and_return Hsrc'));
+  acquire('inspection-host', 'mistral', 'Mistral', 'Первый lock охватывает только power_on_for_inspection.');
+  add('inspection-maintenance', 'Сохранены maintenance и Nova disabled', 'resolve_host_set, установка maintenance=true, Nova disable и их readback успешны. Несколько API round trips здесь укрупнены; источник остаётся вне обслуживания.',
+    {}, compositeLocal('mistral', 'maintenance=true; Nova disabled', 'check', 'Masakari API и Nova: запросы и readback для out-of-service состояния.'));
+  add('power-on', 'Отправлен power-on для inspection', 'Host lock подтверждён; PowerOps вызывает Ironic power-on точного Hsrc. Включение не означает разрешение размещать ВМ.',
+    { counts: { powerOn: 1 } }, compositeSignal('mistral', 'ironic', 'command', 'power-on Hsrc'));
+  add('power-effect', 'Источник физически включён', 'Hsrc включён и остаётся пустым. V продолжает работать на Hdst; старые домены отсутствуют по предпосылке сценария.',
+    { world: { sourcePower: 'on' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание ON'));
+  add('on-read', 'Mistral проверяет power-on', 'Polling должен подтвердить стабильное On и отсутствие ошибки/незавершённого target transition.',
+    {}, compositeSignal('mistral', 'ironic', 'command', 'Чтение стабильного On'));
+  add('on-confirmed', 'Стабильное On подтверждено', 'Питание известно Mistral; Nova compute должен отдельно стать up при сохранённом disabled.',
+    { knowledge: { power: 'on' } }, compositeSignal('ironic', 'mistral', 'observation', 'power on: подтверждено'));
+  add('nova-up-request', 'Проверяется Nova disabled/up', 'power_on_for_inspection ждёт появления compute, сохраняя запрет новых размещений.',
+    {}, compositeSignal('mistral', 'nova', 'command', 'Чтение Hsrc service'));
+  add('nova-up-confirmed', 'Хост доступен для inspection', 'Nova disabled/up подтверждено; maintenance=true сохраняется. Первый action успешно завершён.',
+    { knowledge: { nova: 'disabled / up' }, protocol: { phase: 'INSPECTION_READY' } }, compositeSignal('nova', 'mistral', 'observation', 'Hsrc: disabled / up'));
+  release('inspection-release', 'mistral', 'power_on_for_inspection завершается до operator pause; action lock освобождается.');
+  add('operator-pause', 'Workflow PAUSED: проверка оператором', 'Host lock свободен, heartbeat action остановлен. Оператор проверяет источник и отсутствие stale domains; время само по себе не разрешает продолжение.',
+    { mistral: { workflow: 'PAUSED', action: '—' }, protocol: { phase: 'AWAIT_OPERATOR' } }, compositeLocal('operator', 'Inspection: требуется resume', 'wait'), { awaitOperator: true });
+  add('operator-resume', 'Оператор подтверждает inspection и resume', 'Явное stale_domains_checked=true и пустой stopped manifest разрешают запуск следующего action; Mistral повторно проверяет право на resume.',
+    { mistral: { workflow: 'RUNNING', action: 'return_to_service' }, protocol: { phase: 'RETURN_RECHECKS' } }, compositeSignal('operator', 'mistral', 'command', 'resume · stale_domains_checked=true'));
+  acquire('return-host', 'mistral', 'Mistral', 'Это новый acquire action return_to_service, а не продолжение старого владения.');
+  add('return-rechecks', 'Новый action повторяет условия возврата', 'Под новым lock заново проверены identity, стабильное On, Nova disabled/up и maintenance=true. Пустой manifest валиден; start_instances([]) никого не запускает.',
+    {}, compositeLocal('mistral', 'On + disabled/up + maintenance: OK', 'check', 'Readback Ironic/Nova/Masakari и пустой stopped manifest проверены заново.'));
+  add('enable-request', 'Mistral включает Nova service', 'После inspection и повторных проверок return_to_service разрешает новые размещения на Hsrc.',
+    {}, compositeSignal('mistral', 'nova', 'command', 'enable Hsrc'));
+  add('enable-confirmed', 'Nova enabled подтверждён', 'Административный статус прочитан обратно; источник всё ещё пуст в этой трассе.',
+    { knowledge: { nova: 'enabled / up' } }, compositeSignal('nova', 'mistral', 'observation', 'Hsrc: enabled / up'));
+  add('maintenance-off-request', 'Mistral снимает maintenance', 'После enable_nova action возвращает Masakari host в обычное обслуживание.',
+    {}, compositeSignal('mistral', 'api', 'command', 'Hsrc: maintenance=false'));
+  add('maintenance-off-confirmed', 'Возврат в обслуживание подтверждён', 'Readback maintenance=false успешен; финальные проверки и audit action завершены. Watcher guard этим action не возобновляется.',
+    { protocol: { phase: 'RETURN_CONFIRMED', quarantine: false } }, compositeSignal('api', 'mistral', 'observation', 'maintenance=false'));
+  release('return-release', 'mistral', 'Action return_to_service завершён. Второй host lock освобождается; отдельный Watcher hold сохраняется.',
+    { mistral: { workflow: 'SUCCESS' }, protocol: { phase: 'RETURN_DONE' } });
+  return finish('Два action с разными acquire/release; PAUSED без lock, явный resume, повторные проверки. Watcher остаётся BLOCKED.', [
+    'Не продолжение аварийного recovery: безопасный power-on пустого Hsrc подтверждён отдельной подготовкой.',
+    'stopped_instance_ids=[]; автоматический запуск старых ВМ и проверка непустого manifest здесь не моделируются.',
+    'Watcher изначально BLOCKED отдельным incident; return_to_service не выполняет его CAS-resume.'
+  ]);
+}
+
+const traces = {
+  normal: buildCompositeRecovery('normal'),
+  lost: buildCompositeRecovery('lost'),
+  hold: buildCompositeRecovery('hold'),
+  planned: buildCompositePlanned(),
+  contention: buildCompositeRecovery('contention'),
+  return: buildCompositeReturn(),
+  unknown: buildCompositeRecovery('unknown')
+};
       // TRACE DATA END
 
       const root = document.getElementById('ha-recovery-animation');
-      // Opening this source directly must not require the visualization host.
-      // Do not shadow the host's inherited custom properties when present.
       if (!getComputedStyle(root).getPropertyValue('--foreground').trim()) {
         root.dataset.localTheme = '';
         document.documentElement.dataset.haLocalTheme = '';
@@ -256,252 +451,211 @@
       const ns = 'http://www.w3.org/2000/svg';
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
       const colors = { command: 'var(--viz-series-1)', observation: 'var(--viz-series-2)', effect: 'var(--viz-series-3)', loss: 'var(--viz-series-4)' };
+      const actorNames = { detector: 'Consul / hostmonitor', api: 'Masakari API', controller: 'Masakari engine', mistral: 'Mistral', operator: 'Оператор / Horizon', watcher: 'Watcher', etcd: 'etcd', nova: 'Nova API / scheduling', compute: 'Nova compute Hdst', ironic: 'Ironic / BMC', source: 'Hsrc', target: 'Hdst' };
       let mode = 'normal', index = 0, progress = 0, playing = false, speed = 1, raf = null, lastTime = null;
-      let positions = {}, packet = null, activePath = null, packetLength = 0;
-      let sceneWidth = 0;
+      let positions = {}, packet = null, activePath = null, packetLength = 0, sceneWidth = 0;
       const current = () => traces[mode].frames[index];
       const next = () => traces[mode].frames[index + 1];
       const inTransit = () => Boolean(next() && (playing || progress > 0));
       const displayed = () => inTransit() ? next() : current();
-      const actorNames = { detector: 'Consul / monitor', controller: 'Recovery C0', powerops: 'PowerOps', tooz: 'Tooz', etcd: 'etcd', ironic: 'Ironic / BMC', nova: 'Nova', source: 'Hsrc', target: 'Hdst' };
       function describeEvent(frame) {
         const m = frame.signal;
         if (!m) return 'Начальное состояние · сообщения ещё не отправлены';
         if (m.from === m.to) {
-          const kind = frame.id === 'K10' ? 'Ожидание внутри компонента' : frame.id === 'U01' ? 'Локальный тайм-аут' : 'Локальное действие';
-          return `${kind}: ${actorNames[m.from]} · ${m.label}`;
+          const local = { wait: 'Ожидание внутри компонента', timeout: 'Локальный тайм-аут', check: 'Локальная проверка' };
+          return (m.folded ? 'Сводный шаг' : local[m.localType] || 'Локальное действие') + ': ' + actorNames[m.from] + ' · ' + m.label + (m.folded ? ' · ' + m.folded : '');
         }
-        const kind = { command: 'Команда / запрос', observation: 'Ответ / результат', effect: 'Физический эффект', loss: 'Отказ / потеря' }[m.kind];
-        const routeLabel = [m.from, ...m.via, m.to].map(id => actorNames[id]).join(' → ');
-        const folded = ['K06', 'K08', 'K09'].includes(frame.id) ? ' · запросы UUID-проверок свёрнуты' : ['T10', 'T14'].includes(frame.id) ? ' · повторные чтения polling свёрнуты' : '';
-        return `${kind}: ${routeLabel} · ${m.label}${folded}`;
+        const kind = { command: 'Запрос', observation: 'Ответ / наблюдение', effect: 'Физический эффект', loss: 'Отказ / потеря' }[m.kind];
+        return kind + ': ' + [m.from, ...(m.via || []), m.to].map(id => actorNames[id]).join(' → ') + ' · ' + m.label + (m.folded ? ' · ' + m.folded : '');
       }
-      const make = (name, attrs = {}, text, parent = svg) => {
+      const make = (name, attrs = {}, value, parent = svg) => {
         const element = document.createElementNS(ns, name);
-        Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, String(value)));
-        if (text !== undefined) element.textContent = text;
+        Object.entries(attrs).forEach(([key, val]) => element.setAttribute(key, String(val)));
+        if (value !== undefined) element.textContent = value;
         parent.appendChild(element);
         return element;
       };
-      function text(x, y, value, cls = '', parent = svg) {
-        return make('text', { x, y, class: cls }, value, parent);
+      function text(x, y, value, cls = '', parent = svg) { return make('text', { x, y, class: cls }, value, parent); }
+      function wrap(value, width) {
+        const probe = text(0, 0, '', ''); probe.setAttribute('visibility', 'hidden');
+        const result = []; let line = '';
+        for (const word of String(value).split(/\s+/)) {
+          probe.textContent = line ? line + ' ' + word : word;
+          if (line && probe.getComputedTextLength() > width) { result.push(line); line = word; }
+          else line = probe.textContent;
+        }
+        if (line) result.push(line);
+        const fitted = result.flatMap(value => {
+          probe.textContent = value;
+          if (probe.getComputedTextLength() <= width) return [value];
+          const parts = []; let part = '';
+          for (const ch of value) {
+            probe.textContent = part + ch;
+            if (part && probe.getComputedTextLength() > width) { parts.push(part); part = ch; }
+            else part += ch;
+          }
+          if (part) parts.push(part); return parts;
+        });
+        probe.remove(); return fitted;
       }
       function route(from, to) {
         const a = positions[from], b = positions[to];
-        if (from === to) return `M ${a.x + a.w / 2 - 14} ${a.y - 10} L ${a.x + a.w / 2 + 14} ${a.y - 10}`;
-        if (sceneWidth < 680 && [from, to].includes('controller') && [from, to].some(id => id === 'ironic' || id === 'nova')) {
-          const externalId = from === 'controller' ? to : from;
-          const controller = positions.controller, external = positions[externalId];
-          const left = externalId === 'ironic';
-          const side = left ? 10 : sceneWidth - 12;
-          const points = [[left ? controller.x : controller.x + controller.w, controller.y + controller.h / 2], [side, controller.y + controller.h / 2], [side, external.y - 18], [external.x + external.w / 2, external.y - 18], [external.x + external.w / 2, external.y]];
-          if (from !== 'controller') points.reverse();
-          return points.map(([x, y], i) => `${i ? 'L' : 'M'} ${x} ${y}`).join(' ');
+        const ay = a.y + a.h / 2, by = b.y + b.h / 2;
+        if (Math.abs(a.y - b.y) < 2) {
+          if (Math.abs(a.col - b.col) === 1) {
+            return 'M ' + (a.col < b.col ? a.x + a.w : a.x) + ' ' + ay + ' L ' + (a.col < b.col ? b.x : b.x + b.w) + ' ' + by;
+          }
+          const y = Math.min(a.y, b.y) - 12;
+          return 'M ' + (a.x + a.w / 2) + ' ' + a.y + ' V ' + y + ' H ' + (b.x + b.w / 2) + ' V ' + b.y;
         }
-        if (sceneWidth < 680 && [from, to].includes('tooz') && [from, to].includes('etcd')) {
-          const side = sceneWidth - 5;
-          return `M ${a.x + a.w} ${a.y + a.h / 2} L ${side} ${a.y + a.h / 2} L ${side} ${b.y + b.h / 2} L ${b.x + b.w} ${b.y + b.h / 2}`;
+        if (Math.abs(a.row - b.row) === 1) {
+          const startY = by > ay ? a.y + a.h : a.y, endY = by > ay ? b.y : b.y + b.h;
+          return 'M ' + (a.x + a.w / 2) + ' ' + startY + ' V ' + ((startY + endY) / 2) + ' H ' + (b.x + b.w / 2) + ' V ' + endY;
         }
-        if ((from === 'source' && to === 'detector') || (to === 'source' && from === 'detector')) {
-          return `M ${a.x} ${a.y + a.h / 2} C 3 ${a.y + a.h / 2}, 3 ${b.y + b.h / 2}, ${b.x} ${b.y + b.h / 2}`;
-        }
-        const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
-        const bx = b.x + b.w / 2, by = b.y + b.h / 2;
-        if (Math.abs(by - ay) > Math.abs(bx - ax) * 0.7) {
-          const y1 = by > ay ? a.y + a.h : a.y;
-          const y2 = by > ay ? b.y : b.y + b.h;
-          const mid = (y1 + y2) / 2;
-          return `M ${ax} ${y1} C ${ax} ${mid}, ${bx} ${mid}, ${bx} ${y2}`;
-        }
-        const x1 = bx > ax ? a.x + a.w : a.x;
-        const x2 = bx > ax ? b.x : b.x + b.w;
-        const mid = (x1 + x2) / 2;
-        return `M ${x1} ${ay} C ${mid} ${ay}, ${mid} ${by}, ${x2} ${by}`;
+        // Long routes use row gaps and the outside gutter; they never cross a node.
+        const down = by > ay, y1 = down ? a.y + a.h + 14 : a.y - 14;
+        const y2 = down ? b.y - 14 : b.y + b.h + 14;
+        const gutter = a.col === 0 && b.col === 0 ? 5 : sceneWidth - 5;
+        return 'M ' + (a.x + a.w / 2) + ' ' + (down ? a.y + a.h : a.y) + ' V ' + y1 + ' H ' + gutter + ' V ' + y2 + ' H ' + (b.x + b.w / 2) + ' V ' + (down ? b.y : b.y + b.h);
       }
-      function node(id, title, lines, fill = 'var(--muted)') {
-        const p = positions[id];
-        const group = make('g', { 'data-node': id });
-        make('rect', { x: p.x, y: p.y, width: p.w, height: p.h, rx: 7, fill, stroke: 'var(--border)', 'stroke-width': 1 }, undefined, group);
-        text(p.x + 12, p.y + 23, title, 'ha-node-title', group);
-        lines.forEach((line, i) => text(p.x + 12, p.y + 45 + i * 19, line, i === 0 ? '' : 'ha-secondary', group));
+      function specs(s) {
+        const e = s.evacuation;
+        return {
+          detector: ['Consul / hostmonitor', s.knowledge.networks, 'Политика: all_down'],
+          api: ['Masakari API', ...(['planned', 'return'].includes(mode) ? ['Плановое maintenance', 'Учёт состояния Hsrc'] : ['Incident → Watcher hold', 'Затем notification / RPC'])],
+          controller: ['Masakari engine', s.protocol.phase, 'PowerOps + Tooz · внутри'],
+          mistral: ['Mistral engine / executor', s.mistral.workflow === 'IDLE' ? 'Нет активного workflow' : s.mistral.workflow + (s.mistral.waiting ? ' · ждёт lock' : ''), s.mistral.action === '—' ? 'PowerOps + Tooz · внутри' : s.mistral.action],
+          operator: ['Оператор / Horizon', s.mistral.workflow === 'PAUSED' ? 'Проверка хоста' : 'Плановый workflow', 'Команды через Mistral'],
+          watcher: ['Watcher', s.watcher.state + ' · epoch ' + s.watcher.epoch, s.watcher.action === 'DENIED' ? 'Новый auto action: запрет' : 'CONTINUOUS admission'],
+          etcd: ['etcd · общее хранилище', 'Host: ' + (s.host.owner === 'none' ? 'свободен' : s.host.owner), 'Hold: ' + s.watcher.state + ' · slot ' + (e.slotClaim ? '1' : '0') + ' / 3'],
+          nova: ['Nova API / scheduling', s.knowledge.nova, s.knowledge.vmHost + ' · ' + s.knowledge.vmState],
+          compute: ['Nova compute · Hdst', 'Guard: ' + e.operation, 'Completion proof: ' + (e.proof ? 'получен' : 'нет')],
+          ironic: ['Ironic / BMC', 'Readback: ' + s.knowledge.power, 'Off: ' + s.counts.fence + ' · On: ' + s.counts.powerOn],
+          source: ['Hsrc · фактический мир', 'Питание ' + s.world.sourcePower.toUpperCase(), s.world.sourceVM === 'running' ? 'v0 работает' : s.world.sourceVM === 'absent' ? 'ВМ нет' : 'v0 остановлен', 'Карантин: ' + (s.protocol.quarantine ? 'да' : 'нет')],
+          target: ['Hdst · фактический мир', 'Питание ON', s.world.targetVM === 'running' ? 'v1 работает' : 'ВМ нет']
+        };
       }
       function drawScene() {
-        const s = current().state;
+        const s = current().state, event = displayed(), m = event.signal;
         sceneWidth = Math.max(280, Math.floor(root.getBoundingClientRect().width));
-        const narrow = sceneWidth < 680;
-        const margin = 18, gap = narrow ? 18 : 24;
-        const col = (sceneWidth - margin * 2 - gap * (narrow ? 1 : 2)) / (narrow ? 2 : 3);
-        const right = sceneWidth - margin - col;
-        const middle = margin + col + gap;
-        const executiveY = narrow ? 470 : 314;
-        const worldY = narrow ? 632 : 475;
-        positions = {
-          detector: { x: margin, y: narrow ? 30 : 48, w: col, h: 87 },
-          controller: { x: narrow ? margin : middle, y: narrow ? 176 : 48, w: narrow ? sceneWidth - 36 : col, h: 91 },
-          powerops: { x: narrow ? margin : right, y: narrow ? 310 : 48, w: col, h: 91 },
-          tooz: { x: right, y: narrow ? 310 : 172, w: col, h: 91 },
-          etcd: { x: right, y: narrow ? 30 : executiveY, w: col, h: 91 },
-          ironic: { x: margin, y: executiveY, w: col, h: 91 },
-          nova: { x: narrow ? right : middle, y: executiveY, w: col, h: 91 },
-          source: { x: margin, y: worldY, w: col, h: 108 },
-          target: { x: narrow ? right : middle, y: worldY, w: col, h: 108 }
-        };
-        svg.replaceChildren();
-        svg.setAttribute('viewBox', `0 0 ${sceneWidth} ${worldY + 126}`);
-        svg.setAttribute('height', worldY + 126);
-        const event = displayed();
-        const title = `${event.id}: ${event.title}. ${describeEvent(event)}. Состояния после кадра ${index + 1}. Источник ${s.world.sourcePower === 'on' ? 'включён' : 'выключен'}. Фаза ${s.protocol.phase}${s.protocol.blocked ? ', BLOCKED' : ''}.`;
-        svg.setAttribute('aria-label', title);
-        make('title', {}, title);
-        make('desc', {}, event.detail);
+        const cols = sceneWidth >= 680 ? 3 : sceneWidth >= 440 ? 2 : 1;
+        const margin = 20, gap = 32, width = (sceneWidth - margin * 2 - gap * (cols - 1)) / cols;
+        const planned = ['planned', 'return'].includes(mode);
+        const ids = planned ? ['operator', 'mistral', 'etcd', 'api', 'nova', 'ironic'] : ['detector', 'api', 'controller', 'mistral', 'watcher', 'etcd', 'ironic', 'nova', 'compute'];
+        if (mode === 'contention') ids.unshift('operator');
+        svg.replaceChildren(); positions = {};
+        const label = event.id + ': ' + event.title + '. ' + describeEvent(event) + '. Состояние после кадра ' + (index + 1) + '.';
+        svg.setAttribute('aria-label', label); make('title', {}, label); make('desc', {}, event.detail);
         const defs = make('defs');
         Object.entries(colors).forEach(([kind, color]) => {
-          const marker = make('marker', { id: `ha-recovery-arrow-${kind}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' }, undefined, defs);
+          const marker = make('marker', { id: 'ha-recovery-arrow-' + kind, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' }, undefined, defs);
           make('path', { d: 'M 0 1 L 9 5 L 0 9 Z', fill: color }, undefined, marker);
         });
-        const processX = narrow ? 10 : middle - 8;
-        const processY = narrow ? 140 : 8;
-        const processW = narrow ? sceneWidth - 20 : sceneWidth - processX - 10;
-        make('rect', { x: processX, y: processY, width: processW, height: narrow ? 280 : 270, rx: 8, fill: 'none', stroke: 'var(--border)', 'stroke-width': 1 });
-        text(processX + 8, processY + 20, 'Masakari engine · один процесс', 'ha-node-title');
-        const edges = [['source', 'detector'], ['detector', 'controller'], ['controller', 'powerops'], ['powerops', 'tooz'], ['tooz', 'etcd'], ['controller', 'ironic'], ['controller', 'nova'], ['ironic', 'source'], ['nova', 'target']];
-        edges.forEach(([from, to]) => {
-          const broken = from === 'source' && s.world.management === 'down';
-          make('path', { d: route(from, to), fill: 'none', stroke: broken ? colors.loss : 'var(--border)', 'stroke-width': 1.2, 'stroke-dasharray': broken ? '3 6' : 'none' });
-        });
-        text(margin, worldY - 16, 'Фактический мир', 'ha-secondary');
-        const running = [s.world.sourceVM === 'running' ? 'v0' : null, s.world.targetVM === 'running' ? 'v1' : null].filter(Boolean);
-        if (!narrow) text(sceneWidth / 2, worldY - 16, `Исполняются: ${running.length ? running.join(', ') : 'нет'}`, 'ha-secondary');
-        node('detector', col < 140 ? 'Consul / D' : 'Consul / monitor', [s.knowledge.networks, 'Сети · readback']);
-        node('controller', 'Recovery · C0', [s.protocol.phase, s.protocol.blocked ? 'BLOCKED · исход неизвестен' : 'Управление восстановлением'], s.protocol.blocked ? 'color-mix(in srgb, var(--viz-series-4) 10%, transparent)' : 'var(--muted)');
-        node('powerops', 'PowerOps', ['Coordinator', `H: ${s.guards.owner ? '✓' : '—'}   G: ${s.guards.global ? '✓' : '—'}`]);
-        node('tooz', col < 140 ? 'Tooz' : 'Tooz · библиотека', ['etcd3gw client', s.coordination.heartbeat ? 'HB: в фоне' : 'HB: выкл.']);
-        node('etcd', col < 140 ? 'etcd' : 'etcd · backend', [`H: ${s.locks.host === 'C0' ? 'занят C0' : 'свободен'}`, `G: ${s.locks.global === 'C0' ? 'занят C0' : 'свободен'}`]);
-        node('ironic', 'Ironic / BMC', [s.knowledge.power === 'off' ? 'Off: да' : 'Off: неизвестно', `power-off: ${s.commandCount.fence}`]);
-        node('nova', 'Nova · readback', [s.knowledge.nova, `${s.knowledge.vmHost} · ${s.knowledge.vmState}`]);
-        node('source', col < 140 ? 'Hsrc' : 'Hsrc · источник', [s.world.sourcePower === 'on' ? 'Питание ON' : 'Питание OFF', s.world.sourceVM === 'running' ? 'v0 · работает' : 'v0 · остановлен', s.protocol.blocked ? 'Возврат: нет' : `Карантин: ${s.protocol.quarantine ? 'да' : 'нет'}`], s.world.sourceVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
-        const targetVM = s.world.targetVM === 'absent' ? 'Нет ВМ' : s.world.targetVM === 'running' ? 'v1 · работает' : 'v1 · остановлен';
-        node('target', col < 130 ? 'Hdst · цель' : 'Hdst · назначение', ['Питание ON', targetVM, 'Данные: да'], s.world.targetVM === 'running' ? 'color-mix(in srgb, var(--viz-series-3) 10%, transparent)' : 'var(--muted)');
-        activePath = null; packet = null; packetLength = 0;
-        if (event.signal) {
-          const m = event.signal;
-          if (m.from === m.to) {
-            const group = svg.querySelector(`[data-node="${m.from}"]`);
-            group.setAttribute('data-activity', event.id === 'K10' ? 'wait' : 'local');
-            group.querySelector('rect').setAttribute('stroke', colors[m.kind]);
-            group.querySelector('rect').setAttribute('stroke-width', 2);
-          } else {
-            const layer = make('g', { 'data-event-route': `${m.from}->${m.to}`, 'data-event-kind': m.kind });
-            svg.insertBefore(layer, svg.querySelector('[data-node]'));
-            const hops = [m.from, ...m.via, m.to];
-            const paths = hops.slice(1).map((to, i) => {
-              const d = route(hops[i], to);
-              make('path', { d, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.lost ? '55 100' : m.kind === 'observation' ? '5 4' : 'none', ...(m.lost ? { pathLength: 100 } : { 'marker-end': `url(#ha-recovery-arrow-${m.kind})` }), 'data-hop': `${hops[i]}->${to}` }, undefined, layer);
-              return d;
+        const all = specs(s); let y = 22, row = 0;
+        const drawGroup = actorIds => {
+          for (let offset = 0; offset < actorIds.length; offset += cols) {
+            const entries = actorIds.slice(offset, offset + cols).map(id => {
+              const lines = all[id].flatMap((value, i) => wrap(value, width - 22).map(part => ({ value: part, cls: i === 0 ? 'ha-node-title' : i > 1 ? 'ha-secondary' : '' })));
+              if (m && m.from === id && m.to === id) lines.push({ value: m.localType === 'wait' ? '⏸ ОЖИДАНИЕ' : m.localType === 'timeout' ? '× ТАЙМ-АУТ' : m.folded ? '• СВОДНЫЙ ШАГ' : '• ЛОКАЛЬНО', cls: 'ha-node-title' });
+              return { id, lines };
             });
-            // Join entry and exit through intermediate components. The packet
-            // passes behind their opaque nodes instead of jumping across gaps.
-            const motionPath = paths.map((d, i) => i ? d.replace(/^M /, 'L ') : d).join(' ');
-            activePath = make('path', { d: motionPath, fill: 'none', stroke: 'none', 'aria-hidden': 'true' }, undefined, layer);
-            packetLength = activePath.getTotalLength();
-            packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden', 'data-packet': 'true' }, undefined, layer);
-            if (m.lost) {
-              const p = activePath.getPointAtLength(packetLength * 0.55);
-              text(p.x - 4, p.y + 4, '×', 'ha-node-title', layer);
-            }
+            const height = Math.max(...entries.map(e => 24 + e.lines.length * 18));
+            entries.forEach(({ id, lines }, col) => {
+              const x = margin + col * (width + gap); positions[id] = { x, y, w: width, h: height, col, row };
+              const active = m && [m.from, m.to].includes(id);
+              const group = make('g', { 'data-node': id, ...(active && m.from === m.to ? { 'data-activity': m.localType || 'local' } : {}) });
+              make('rect', { x, y, width, height, rx: 6, fill: 'var(--muted)', stroke: active ? colors[m.kind] : 'var(--border)', 'stroke-width': active ? 2 : 1 }, undefined, group);
+              lines.forEach((line, i) => text(x + 11, y + 23 + i * 18, line.value, line.cls, group));
+            });
+            y += height + gap; row += 1;
           }
+        };
+        drawGroup(ids); y += 12;
+        drawGroup(['source', 'target']);
+        svg.setAttribute('viewBox', '0 0 ' + sceneWidth + ' ' + (y - 12)); svg.setAttribute('height', y - 12);
+        activePath = null; packet = null; packetLength = 0;
+        if (m && m.from !== m.to) {
+          const layer = make('g', { 'data-event-route': m.from + '->' + m.to, 'data-event-kind': m.kind });
+          svg.insertBefore(layer, svg.querySelector('[data-node]'));
+          const hops = [m.from, ...(m.via || []), m.to];
+          const paths = hops.slice(1).map((to, i) => {
+            const d = route(hops[i], to);
+            make('path', { d, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.lost ? '55 100' : m.kind === 'observation' ? '5 4' : 'none', ...(m.lost ? { pathLength: 100 } : { 'marker-end': 'url(#ha-recovery-arrow-' + m.kind + ')' }), 'data-hop': hops[i] + '->' + to }, undefined, layer);
+            return d;
+          });
+          activePath = make('path', { d: paths.map((d, i) => i ? d.replace(/^M /, 'L ') : d).join(' '), fill: 'none', stroke: 'none', 'aria-hidden': true }, undefined, layer);
+          packetLength = activePath.getTotalLength();
+          packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden', 'data-packet': true }, undefined, layer);
+          if (m.lost) { const p = activePath.getPointAtLength(packetLength * .55); text(p.x - 4, p.y + 4, '×', 'ha-node-title', layer); }
         }
         drawPacket();
       }
       function drawPacket() {
         if (!packet || !activePath) return;
         const m = displayed().signal;
-        const visible = inTransit() && progress > 0 && !reducedMotion.matches;
-        const distance = m.lost ? Math.min(progress, 0.55) : progress;
-        const p = activePath.getPointAtLength(packetLength * distance);
-        packet.setAttribute('cx', p.x);
-        packet.setAttribute('cy', p.y);
-        packet.setAttribute('visibility', visible && !(m.lost && progress > 0.72) ? 'visible' : 'hidden');
+        const p = activePath.getPointAtLength(packetLength * (m.lost ? Math.min(progress, .55) : progress));
+        packet.setAttribute('cx', p.x); packet.setAttribute('cy', p.y);
+        packet.setAttribute('visibility', inTransit() && progress > 0 && !reducedMotion.matches && !(m.lost && progress > .72) ? 'visible' : 'hidden');
       }
       function renderUI() {
-        const frames = traces[mode].frames;
-        const frame = current(), s = frame.state, event = displayed();
-        q('[data-count]').textContent = `${index + 1} / ${frames.length}`;
-        q('[data-position]').max = frames.length - 1;
-        q('[data-position]').value = index;
-        q('[data-position]').setAttribute('aria-valuetext', `${index + 1}: ${frame.id}, ${frame.title}`);
-        q('[data-title]').textContent = `${event.id} · ${event.title}`;
-        q('[data-route]').textContent = describeEvent(event);
-        q('[data-detail]').textContent = event.detail;
+        const trace = traces[mode], frame = current(), s = frame.state, e = s.evacuation, event = displayed();
+        q('[data-count]').textContent = (index + 1) + ' / ' + trace.frames.length;
+        q('[data-position]').max = trace.frames.length - 1; q('[data-position]').value = index;
+        q('[data-position]').setAttribute('aria-valuetext', (index + 1) + ': ' + frame.title);
+        q('[data-title]').textContent = event.id + ' · ' + event.title;
+        q('[data-route]').textContent = describeEvent(event); q('[data-detail]').textContent = event.detail;
         q('[data-prev]').disabled = index === 0 && progress === 0;
-        q('[data-next]').disabled = index === frames.length - 1;
-        q('[data-play]').textContent = playing ? 'Пауза' : index === frames.length - 1 ? 'Повторить' : 'Воспроизвести';
+        q('[data-next]').disabled = index === trace.frames.length - 1 || Boolean(frame.awaitOperator);
+        q('[data-play]').disabled = Boolean(frame.awaitOperator);
+        q('[data-play]').textContent = playing ? 'Пауза' : index === trace.frames.length - 1 ? 'Повторить' : 'Воспроизвести';
         q('[data-play]').setAttribute('aria-pressed', String(playing));
-        q('[data-motion]').textContent = inTransit() ? ` · ${playing ? 'Выполняется' : 'Пауза в переходе'} · состояния до события, после кадра ${index + 1}` : index ? ` · ${event.id === 'K10' ? 'Ожидание продолжается' : 'Событие завершено'} · состояния после кадра ${index + 1}` : '';
-        q('[data-profile]').textContent = mode === 'hold' ? 'P0: all_down по трём сетям.' : 'P1: recovery разрешено исследовательской политикой.';
-        q('[data-contract]').textContent = mode === 'hold' ? 'При down/up/up ВМ продолжает работать.' : 'PowerOps включён · auto recovery · ACTIVE → ACTIVE.';
-        for (const key of ['host', 'global']) {
-          const actual = s.locks[key] === 'C0' ? 'занят C0' : 'свободен';
-          q(`[data-lock-${key}]`).textContent = `etcd: ${actual} · C0: ${s.coordination[key + 'View']}${key === 'global' && s.coordination.interval ? ' · удерживается на evacuation_interval' : ''}`;
-        }
-        const allGuards = Object.values(s.guards).every(Boolean);
-        const canSend = allGuards && !s.protocol.blocked && s.protocol.phase === 'SOURCE_DOWN_CONFIRMED' && s.operations.evacuate === 'NOT_SENT';
-        let gate = 'Допуск evacuation: основания ещё не собраны';
-        if (canSend) gate = 'Evacuation разрешена: основания модели + global lock';
-        else if (s.protocol.blocked) gate = 'Допуск evacuation: запрещён до разрешения исхода';
-        else if (s.operations.evacuate !== 'NOT_SENT') gate = 'Evacuation уже отправлена; повторный допуск не выдаётся';
-        else if (mode === 'hold') gate = 'Допуск evacuation: политика не разрешает recovery';
+        q('[data-operator-gate]').hidden = !frame.awaitOperator;
+        q('[data-motion]').textContent = inTransit() ? ' · Выполняется переход; показано состояние до события' : ' · Состояние после кадра ' + (index + 1);
+        q('[data-profile]').textContent = trace.profile; q('[data-contract]').textContent = 'Контракт сценария: ' + trace.contract;
+        q('[data-assumptions]').textContent = Array.isArray(trace.assumptions) ? trace.assumptions.join(' ') : trace.assumptions;
+        q('[data-lock-host]').textContent = 'Владелец: ' + (s.host.owner === 'none' ? 'нет' : s.host.owner) + ' · ' + s.host.view + ' · heartbeat: ' + (s.host.heartbeat ? 'в фоне' : 'выкл.');
+        q('[data-watcher]').textContent = s.watcher.state + ' · epoch ' + s.watcher.epoch + ' · только новая периодическая автоматизация';
+        q('[data-claims]').textContent = 'VM: ' + (e.vmClaim ? 'занята' : 'свободна') + ' · target: ' + (e.targetClaim ? 'занят' : 'свободен') + ' · slots: ' + (e.slotClaim ? '1' : '0') + ' / 3 · operation: ' + e.operation;
+        let gate = 'Evacuation ещё не отправлена';
+        if (['planned', 'return'].includes(mode)) gate = 'Плановый workflow Mistral · evacuation в этой трассе нет';
+        else if (mode === 'hold') gate = 'Recovery запрещено политикой all_down';
+        else if (e.operation === 'UNKNOWN') gate = 'UNKNOWN: claims удерживаются; автоматического повтора нет';
+        else if (e.operation === 'COOLDOWN') gate = 'ВМ уже работает; 5 с cooldown удерживают VM, target и slot';
+        else if (e.operation === 'DONE') gate = 'DONE: claims освобождены; Watcher hold остаётся';
+        else if (e.submitted) gate = 'Intent: ' + e.intent + ' · наблюдение Masakari: ' + e.observation + ' · operation: ' + e.operation;
+        else if (s.protocol.blocked) gate = 'Нет допустимого Off evidence: evacuation не отправляется';
         q('[data-gate]').textContent = gate;
-        q('[data-guards]').replaceChildren(...Object.entries(guardLabels).map(([key, label]) => {
-          const item = document.createElement('li');
-          const mark = document.createElement('span');
-          mark.className = 'ha-guard-mark';
-          mark.setAttribute('aria-hidden', 'true');
-          mark.textContent = s.guards[key] ? '✓' : '—';
-          const text = document.createElement('span'); text.textContent = label;
-          item.setAttribute('aria-label', `${label}: ${s.guards[key] ? 'подтверждено' : 'не подтверждено'}`);
-          item.append(mark, text); return item;
-        }));
       }
       function render() { renderUI(); drawScene(); }
-      function stop() {
-        playing = false;
-        if (raf !== null) cancelAnimationFrame(raf);
-        raf = null; lastTime = null;
-      }
-      function seek(position) {
-        stop(); index = Math.max(0, Math.min(traces[mode].frames.length - 1, position)); progress = 0; render();
-      }
+      function stop() { playing = false; if (raf !== null) cancelAnimationFrame(raf); raf = null; lastTime = null; }
+      function seek(position) { stop(); index = Math.max(0, Math.min(traces[mode].frames.length - 1, position)); progress = 0; render(); }
       function tick(now) {
         if (!playing) return;
         if (lastTime !== null) progress += Math.min(now - lastTime, 120) / (1800 / speed);
         lastTime = now;
         if (progress >= 1) {
           index += 1; progress = 0;
-          if (index === traces[mode].frames.length - 1) stop();
+          if (index === traces[mode].frames.length - 1 || current().awaitOperator) stop();
           render();
         } else drawPacket();
         if (playing) raf = requestAnimationFrame(tick);
       }
       q('[data-play]').addEventListener('click', () => {
+        if (current().awaitOperator) return;
         if (playing) { stop(); render(); return; }
         if (index === traces[mode].frames.length - 1) { index = 0; progress = 0; }
         playing = true; lastTime = null; render(); raf = requestAnimationFrame(tick);
       });
       q('[data-prev]').addEventListener('click', () => seek(progress > 0 ? index : index - 1));
-      q('[data-next]').addEventListener('click', () => seek(index + 1));
+      q('[data-next]').addEventListener('click', () => { if (!current().awaitOperator) seek(index + 1); });
+      q('[data-resume]').addEventListener('click', () => { if (current().awaitOperator) seek(index + 1); });
       q('[data-reset]').addEventListener('click', () => seek(0));
       q('[data-position]').addEventListener('input', event => seek(Number(event.target.value)));
       q('[data-speed]').addEventListener('change', event => { speed = Number(event.target.value); });
       q('[data-scenario]').addEventListener('change', event => { mode = event.target.value; seek(0); });
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden && playing) { stop(); render(); }
-      });
+      document.addEventListener('visibilitychange', () => { if (document.hidden && playing) { stop(); render(); } });
       reducedMotion.addEventListener('change', drawPacket);
-      new ResizeObserver(() => {
-        const width = Math.max(280, Math.floor(root.getBoundingClientRect().width));
-        if (width !== sceneWidth) drawScene();
-      }).observe(root);
+      new ResizeObserver(() => { const width = Math.max(280, Math.floor(root.getBoundingClientRect().width)); if (width !== sceneWidth) drawScene(); }).observe(root);
       render();
     })();
   </script>
