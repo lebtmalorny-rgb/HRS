@@ -1,12 +1,16 @@
 # Визуальная карта исследования HA/DRS
 
-Дата: 2026-10-01. Версия: 0.2.
+Дата: 2026-10-01. Версия: 0.3.
 
 Схемы представляют [паспорт модели](HA_DRS_MODEL_V0_1.md) и
 [переходы SC-01](HA_DRS_SCENARIO_01.md). Это представление исследовательской
 спецификации, а не схема подтверждённого deployment или результат проверки
 надёжности. Обозначения участников, T/U-переходов и I-свойств общие с этими
 документами.
+
+Выбранный состав исследования уточнён: [архивы + доработки mimaric](HA_DRS_IMPLEMENTATION_BASELINE.md).
+HTML ниже пока воспроизводит архивный профиль; схемы Mistral в новом
+разделе описывают его расширение по коду патчей, не состояние стенда.
 
 ## HTML-анимация SC-01
 
@@ -181,6 +185,89 @@ hostmonitor ещё требует проверки.
 | Mistral | Плановые операции могут затронуть те же хосты и ВМ; в SC-01 исключены A06 | SC-03: конкуренция плановой и аварийной операции |
 | Kolla-Ansible | Задаёт конфигурацию и состав deployment | Карта конфигурации и привязка версии, отдельно от исполнения recovery |
 | Возврат источника | Отдельная процедура с проверками; восстановление связи её не заменяет | SC-05: возврат fenced-хоста |
+
+### Mistral: почему его работа не видна в текущей анимации
+
+В HTML показан только аварийный путь Masakari. Mistral не вызывается между
+fencing и evacuation: он исполняет отдельные плановые workflows и PowerOps
+actions. Отсутствие его событий в этом сценарии ничего не говорит о состоянии
+Mistral на стенде. В выбранном расширенном составе необходимо показать оба
+пути и общий ресурс, за который они конкурируют:
+
+```mermaid
+flowchart LR
+    O["Оператор / Horizon"] -->|"запуск workflow"| M["Mistral engine → executor<br/>PowerOps action"]
+    D["Hostmonitor"] -->|"уведомление"| A["Masakari API → engine<br/>аварийный TaskFlow"]
+    M -->|"Tooz: lock на один action"| E["etcd<br/>powerops/host/canonical-host"]
+    A -->|"Tooz: lock на весь recovery"| E
+    M -->|"плановые операции"| I["Ironic → BMC"]
+    A -->|"fencing"| I
+    M -->|"плановые действия с compute и ВМ"| N["Nova"]
+    A -->|"evacuate"| N
+    M -->|"maintenance / проверки"| API["Masakari API"]
+```
+
+PowerOps здесь — код внутри Masakari engine и Mistral executor. Tooz —
+библиотека координации в каждом процессе. Отдельный сервер PowerOps не
+появляется. Одинаковые backend, namespace и каноническое имя хоста —
+предпосылки конкуренции за один lock. Уже отправленные внешние команды
+потеря lock не отменяет.
+
+Для `power_ops.power_on_and_return` граница action особенно важна:
+
+```mermaid
+sequenceDiagram
+    participant O as Оператор / Horizon
+    participant M as Mistral engine / executor
+    participant E as etcd через Tooz
+    participant S as Nova / Ironic / Masakari API
+    O->>M: Запуск power_on_and_return
+    M->>E: acquire host lock для power_on_for_inspection
+    E-->>M: Владение подтверждено
+    M->>S: Maintenance, Nova disabled, power on, проверки
+    S-->>M: Результаты проверок
+    M->>E: release host lock
+    E-->>M: Освобождён
+    Note over O,M: PAUSED: проверка оператором, action lock свободен
+    O->>M: Resume с результатом проверки
+    M->>E: Новый acquire для return_to_service
+    E-->>M: Владение подтверждено
+    M->>S: Повторные проверки, возврат в обслуживание
+    S-->>M: Результаты
+    M->>E: release host lock
+    E-->>M: Освобождён
+    M-->>O: Workflow завершён
+```
+
+Это успешная последовательность. Пауза не разрешает возврат автоматически:
+следующий action получает lock заново и проверяет условия. Перед power-on
+должны быть выполнены отдельные условия безопасного возврата источника;
+эту схему нельзя автоматически пристыковать к финалу recovery как доказательство
+отсутствия старых доменов. Read-only `host_power_status` lock не берёт.
+
+Источники: [host coordination](https://github.com/lebtmalorny-rgb/mimaric/blob/71b0123f390bfeaab4dc4ca2dffaa6fab32a6cdf/horizon/patches/mistral/0001-feat-add-PowerOps-action-coordination.patch),
+[границы action](https://github.com/lebtmalorny-rgb/mimaric/blob/71b0123f390bfeaab4dc4ca2dffaa6fab32a6cdf/horizon/patches/mistral/0006-fix-harden-planned-action-boundaries.patch),
+[actions возврата](https://github.com/lebtmalorny-rgb/mimaric/blob/71b0123f390bfeaab4dc4ca2dffaa6fab32a6cdf/horizon/patches/mistral/0007-feat-add-guarded-host-return-actions.patch),
+[workbook](https://github.com/lebtmalorny-rgb/mimaric/blob/71b0123f390bfeaab4dc4ca2dffaa6fab32a6cdf/horizon/patches/mistral/0008-feat-register-the-PowerOps-workbook-API.patch).
+Это семантика поставляемой серии; совместимость серии `horizon` с имеющимися
+архивами не установлена.
+
+### Что переносить в следующий вариант анимации
+
+| Сценарий | Что должно двигаться и меняться | Что нельзя подразумевать |
+|---|---|---|
+| Аварийное recovery с доработками | Masakari API устанавливает Watcher hold; engine держит host lock; Nova compute получает admission через durable claims | Mistral не является аварийным workflow engine; прежний global Tooz lock не действует одновременно с новым guard |
+| Плановый PowerOps action | Mistral executor получает host lock и вызывает нужные API; отдельно видны запрос, ответ и локальная проверка | Весь workflow не держит один lock непрерывно |
+| Конкуренция за Hsrc | Один владелец host lock; другой ждёт до допуска либо получает timeout/error | Watcher hold не является общей блокировкой Mistral и ручных Nova операций |
+| Возврат хоста | `power_on_for_inspection` → release → PAUSED → новое acquire → `return_to_service` | PAUSED не означает зависший процесс или удерживаемую блокировку |
+| Успешный финал recovery | Claims освобождаются при `COOLDOWN → DONE`; затем освобождён host lock, Watcher остаётся BLOCKED | Успех HA не вызывает автоматический resume Watcher; при UNKNOWN claims сохраняются |
+
+Для расширенной анимации предлагается явно задавать исследовательский профиль
+с включёнными PowerOps, Watcher guard и evacuation guard. Ответ пользователя
+о составе исходников не устанавливает значения этих флагов в deployment.
+Нужны отдельные показатели владельца host lock, Watcher hold и VM/target/slot
+claims. Их объединение в один индикатор «координация» скрывает разные границы
+защиты. Эти сценарии ещё не реализованы в текущем HTML.
 
 ## 2. Граф фаз SC-01
 
