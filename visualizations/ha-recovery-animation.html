@@ -16,6 +16,7 @@
       --viz-series-2: VisitedText;
       --viz-series-3: CanvasText;
       --viz-series-4: Highlight;
+      --viz-series-5: Mark;
       --font-size-base: 14px;
       font: var(--font-size-base)/1.5 system-ui, sans-serif;
       color: var(--foreground);
@@ -115,6 +116,10 @@
   <div class="ha-operator" data-operator-gate hidden>
     <button class="btn" type="button" data-resume>В модели: проверка выполнена → resume</button>
   </div>
+  <div class="ha-caption" aria-live="polite" aria-atomic="true">
+    <strong data-vm-location></strong><br>
+    <span class="text-small text-muted" data-vm-observation></span>
+  </div>
   <svg class="ha-scene" role="img" aria-label="Схема участников HA и состояние виртуальной машины"></svg>
   <div class="ha-legend text-small" aria-label="Обозначения сообщений">
     <span><i class="ha-swatch ha-connection" aria-hidden="true"></i>Связь компонентов · не сообщение</span>
@@ -135,6 +140,7 @@
     <p>Watcher hold не отменяет уже допущенные действия и не блокирует Mistral или ручные Nova операции. Потеря lock не отменяет отправленный запрос.</p>
     <p>Nova API, conductor и scheduler показаны отдельно. Placement, БД, RabbitMQ и внутренние вызовы Nova свёрнуты. Путь Nova уточнён по upstream 2025.1; исходники Nova-форка в архивах отсутствуют.</p>
     <p>На хостах разделены состояние сервиса по Nova API, последнее чтение ВМ и фактический мир libvirt/QEMU. Hdst enabled/up — условие сценария, не результат нового запроса.</p>
+    <p>Размещение по архиву Kolla: hostmonitor, Ironic API и conductor — control; Consul agents также работают на compute. Локальные Consul endpoints hostmonitor и server-группы по сетям свёрнуты. BMC находится вне ОС и остаётся отдельным участником при выключении хоста.</p>
     <p>Источник: архивы + mimaric 71b0123. Совместная сборка и deployment не подтверждены. Время условное; это иллюстрация, не результат TLC или измерение стенда.</p>
   </details>
   <noscript>Для управления анимацией нужен JavaScript. Состав и ограничения: HA_DRS_IMPLEMENTATION_BASELINE.md.</noscript>
@@ -189,6 +195,12 @@ function compositeBuilder(mode, patch = {}) {
     add(`${prefix}-confirmed`, 'Host lock освобождён', 'Release успешен, coordinator завершён, heartbeat остановлен. Освобождение lock не отменяет отправленные внешние команды.',
       { ...delta, host: { owner: 'none', confirmed: false, heartbeat: false, view: 'освобождён' } }, compositeSignal('etcd', actor, 'observation', 'release: успешно'));
   };
+  const powerRoute = (prefix, target) => {
+    add(`${prefix}-conductor`, 'Ironic API передаёт команду conductor', 'Команда для точного Ironic Node Hsrc передаётся обслуживающему conductor. Принятие команды ещё не меняет физическое питание.',
+      {}, compositeSignal('ironic', 'ironicConductor', 'command', `RPC: power-${target} Hsrc`));
+    add(`${prefix}-bmc`, 'Ironic conductor обращается к BMC Hsrc', 'Драйвер conductor отправляет power target через настроенный Redfish либо IPMI. BMC управляет питанием независимо от nova-compute и ОС источника.',
+      {}, compositeSignal('ironicConductor', 'sourceBmc', 'command', `Redfish / IPMI: power-${target}`));
+  };
   const finish = (contract, assumptions = []) => ({
     id: `COMPOSITE-${mode.toUpperCase()}`,
     profile: 'Архивы + mimaric · PowerOps + Watcher guard + evacuation guard',
@@ -202,19 +214,20 @@ function compositeBuilder(mode, patch = {}) {
       'Admission: max_parallel=3, один receiving ComputeNode UUID за раз; cooldown=5 с. Время анимации условное.',
       'Guard встроен в Masakari/Nova, PowerOps/Tooz — в Masakari/Mistral; отдельных daemon нет.',
       'Hdst nova-compute enabled/up — начальное условие, его отдельное API-чтение не моделируется. Последнее чтение ВМ может отставать от физического мира.',
+      'Power command раскрыт как Ironic API → conductor → BMC Hsrc → физическое питание; обратные проверки conductor/BMC при polling свёрнуты в readback Ironic API.',
       ...assumptions
     ],
     frames
   });
-  return { add, acquire, release, finish };
+  return { add, acquire, release, powerRoute, finish };
 }
 
 function buildCompositeRecovery(mode) {
-  const { add, acquire, release, finish } = compositeBuilder(mode);
+  const { add, acquire, release, powerRoute, finish } = compositeBuilder(mode);
   add('init', 'Одна ВМ на источнике', 'v0 работает на Hsrc; на Hdst экземпляра нет. Mistral исполняет отдельные плановые workflows и не входит в аварийный TaskFlow.');
   const networks = mode === 'hold' ? 'down / up / up' : 'down / down / down';
-  add('network-loss', mode === 'hold' ? 'Потеря одной сети' : 'Потеря трёх наблюдаемых сетей', 'Изменилась связность мира. Потеря связи не доказывает остановку ВМ: v0 всё ещё работает.',
-    { world: { networks } }, compositeSignal('source', 'detector', 'loss', networks, { lost: true }));
+  add('network-loss', mode === 'hold' ? 'Потеря одной сети' : 'Потеря трёх наблюдаемых сетей', 'Изменилась доступность Hsrc в сетях Consul. Это потеря наблюдаемой связи, а не уведомление от отказавшего хоста. Потеря связи не доказывает остановку ВМ: v0 всё ещё работает.',
+    { world: { networks } }, compositeSignal('sourceConsul', 'detector', 'loss', networks, { lost: true, folded: 'Consul gossip и чтение локальных endpoints на control свёрнуты.' }));
   add('network-observation', 'Детектор обновил наблюдения', `Эффективный набор содержит три сети: ${networks}. Политика all_down проверяется по этому набору.`,
     { knowledge: { networks }, protocol: { phase: 'SUSPECTED' } }, compositeLocal('detector', 'Проверка all_down'));
   if (mode === 'hold') {
@@ -257,8 +270,9 @@ function buildCompositeRecovery(mode) {
     { knowledge: { sourceService: 'disable: вызов завершён' } }, compositeSignal('nova', 'controller', 'observation', 'disable: успешно'));
   add('fence-request', 'Отправлен power-off источника', 'Перед вызовом и во время polling выполняются assert_healthy; успешные повторы укрупнены. Ironic адресует точный BMC источника.',
     { protocol: { phase: 'FENCE_PENDING' }, counts: { fence: 1 } }, compositeSignal('controller', 'ironic', 'command', 'power-off Hsrc', { folded: 'Heartbeat и повторные UUID-check перед power-off/polling.' }));
+  powerRoute('fence', 'off');
   add('fence-effect', 'Источник физически выключен', 'v0 остановлен в фактическом мире. Masakari ещё не получил допустимое подтверждение Off.',
-    { world: { sourcePower: 'off', sourceVM: 'stopped' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание OFF'));
+    { world: { sourcePower: 'off', sourceVM: 'stopped' } }, compositeSignal('sourceBmc', 'source', 'effect', 'BMC: питание OFF'));
   add('off-read-request', 'Запрошен readback питания', 'Успех команды не заменяет стабильное наблюдение power off; polling проверяет состояние Ironic и здоровье координации.',
     {}, compositeSignal('controller', 'ironic', 'command', 'Чтение стабильного Off'));
   if (mode === 'lost') {
@@ -352,7 +366,7 @@ function buildCompositeRecovery(mode) {
 }
 
 function buildCompositePlanned() {
-  const { add, acquire, release, finish } = compositeBuilder('planned', {
+  const { add, acquire, release, powerRoute, finish } = compositeBuilder('planned', {
     world: { sourceVM: 'absent', targetVM: 'running' },
     knowledge: { power: 'on', vmHost: 'Hdst', vmState: 'ACTIVE' }
   });
@@ -376,8 +390,9 @@ function buildCompositePlanned() {
     {}, compositeSignal('nova', 'mistral', 'observation', 'Hsrc instances=[]'));
   add('power-off', 'Отправлен плановый power-off', 'Проверки heartbeat/UUID продолжаются внутри action. allow_hard_off=false; аварийное жёсткое выключение здесь не требуется.',
     { counts: { fence: 1 }, protocol: { phase: 'PLANNED_OFF_PENDING' } }, compositeSignal('mistral', 'ironic', 'command', 'Плановый power-off Hsrc'));
+  powerRoute('power-off', 'off');
   add('power-effect', 'Питание Hsrc выключено', 'На Hsrc не было ВМ. Работа V на Hdst продолжается.',
-    { world: { sourcePower: 'off' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание OFF'));
+    { world: { sourcePower: 'off' } }, compositeSignal('sourceBmc', 'source', 'effect', 'BMC: питание OFF'));
   add('off-read', 'Mistral проверяет состояние питания', 'Primitive ждёт стабильный power off, отсутствие target transition и Ironic last_error; повторы polling укрупнены.',
     {}, compositeSignal('mistral', 'ironic', 'command', 'Чтение стабильного Off'));
   add('off-confirmed', 'Плановое выключение подтверждено', 'Power off подтверждён. Maintenance сохраняется, Nova остаётся disabled; stopped manifest пуст.',
@@ -393,7 +408,7 @@ function buildCompositePlanned() {
 }
 
 function buildCompositeReturn() {
-  const { add, acquire, release, finish } = compositeBuilder('return', {
+  const { add, acquire, release, powerRoute, finish } = compositeBuilder('return', {
     world: { sourcePower: 'off', sourceVM: 'absent', targetVM: 'running' },
     knowledge: { power: 'off', sourceService: 'disabled / down', vmHost: 'Hdst', vmState: 'ACTIVE' },
     protocol: { phase: 'MAINTENANCE', quarantine: true },
@@ -407,8 +422,9 @@ function buildCompositeReturn() {
     {}, compositeLocal('mistral', 'maintenance=true; Nova disabled', 'check', 'Masakari API и Nova: запросы и readback для out-of-service состояния.'));
   add('power-on', 'Отправлен power-on для inspection', 'Host lock подтверждён; PowerOps вызывает Ironic power-on точного Hsrc. Включение не означает разрешение размещать ВМ.',
     { counts: { powerOn: 1 } }, compositeSignal('mistral', 'ironic', 'command', 'power-on Hsrc'));
+  powerRoute('power-on', 'on');
   add('power-effect', 'Источник физически включён', 'Hsrc включён и остаётся пустым. V продолжает работать на Hdst; старые домены отсутствуют по предпосылке сценария.',
-    { world: { sourcePower: 'on' } }, compositeSignal('ironic', 'source', 'effect', 'BMC: питание ON'));
+    { world: { sourcePower: 'on' } }, compositeSignal('sourceBmc', 'source', 'effect', 'BMC: питание ON'));
   add('on-read', 'Mistral проверяет power-on', 'Polling должен подтвердить стабильное On и отсутствие ошибки/незавершённого target transition.',
     {}, compositeSignal('mistral', 'ironic', 'command', 'Чтение стабильного On'));
   add('on-confirmed', 'Стабильное On подтверждено', 'Питание известно Mistral; Nova compute должен отдельно стать up при сохранённом disabled.',
@@ -463,7 +479,7 @@ const traces = {
       const ns = 'http://www.w3.org/2000/svg';
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
       const colors = { command: 'var(--viz-series-1)', observation: 'var(--viz-series-2)', effect: 'var(--viz-series-3)', loss: 'var(--viz-series-4)' };
-      const actorNames = { detector: 'Consul / hostmonitor', api: 'Masakari API', controller: 'Masakari engine', mistral: 'Mistral', operator: 'Оператор / Horizon', watcher: 'Watcher', etcd: 'etcd', nova: 'Nova API', conductor: 'Nova conductor', scheduler: 'Nova scheduler', sourceCompute: 'nova-compute Hsrc', compute: 'nova-compute Hdst', ironic: 'Ironic / BMC', source: 'Хост Hsrc', target: 'Hdst · libvirt / QEMU' };
+      const actorNames = { detector: 'Hostmonitor · control', api: 'Masakari API', controller: 'Masakari engine', mistral: 'Mistral', operator: 'Оператор / Horizon', watcher: 'Watcher', etcd: 'etcd', nova: 'Nova API', conductor: 'Nova conductor', scheduler: 'Nova scheduler', sourceConsul: 'Consul agents Hsrc', targetConsul: 'Consul agents Hdst', sourceCompute: 'nova-compute Hsrc', compute: 'nova-compute Hdst', ironic: 'Ironic API', ironicConductor: 'Ironic conductor', sourceBmc: 'BMC Hsrc', targetBmc: 'BMC Hdst', source: 'Хост Hsrc', target: 'Hdst · libvirt / QEMU' };
       // One permanent, undirected relationship per pair used by the traces.
       // Colored arrows below show the direction of an individual event.
       const connections = [...new Map(Object.values(traces).flatMap(trace => trace.frames.flatMap(frame => {
@@ -474,7 +490,7 @@ const traces = {
           const pair = [hops[i], to].sort();
           return [pair.join(':'), pair];
         });
-      }))).values(), ['sourceCompute', 'source']];
+      }))).values(), ['sourceCompute', 'source'], ['targetConsul', 'detector'], ['ironicConductor', 'targetBmc']];
       let mode = 'normal', index = 0, progress = 0, playing = false, speed = 1, raf = null, lastTime = null;
       let positions = {}, packet = null, activePath = null, packetLength = 0, sceneWidth = 0;
       const current = () => traces[mode].frames[index];
@@ -528,21 +544,23 @@ const traces = {
         const lane = (edgeIndex % 5 - 2) * 5;
         if (Math.abs(a.y - b.y) < 2) {
           if (Math.abs(a.col - b.col) === 1) {
-            return 'M ' + (a.col < b.col ? a.x + a.w : a.x) + ' ' + (ay + lane) + ' L ' + (a.col < b.col ? b.x : b.x + b.w) + ' ' + (by + lane);
+            const y = a.y + Math.min(a.h, b.h) / 2 + lane;
+            return 'M ' + (a.col < b.col ? a.x + a.w : a.x) + ' ' + y + ' L ' + (a.col < b.col ? b.x : b.x + b.w) + ' ' + y;
           }
-          const y = Math.min(a.y, b.y) - 22 + lane;
+          const y = Math.min(a.y, b.y) - (a.sectionStart || b.sectionStart ? 42 : 22) + lane;
           return 'M ' + (a.x + a.w / 2) + ' ' + a.y + ' V ' + y + ' H ' + (b.x + b.w / 2) + ' V ' + b.y;
         }
         if (Math.abs(a.row - b.row) === 1) {
           const startY = by > ay ? a.y + a.h : a.y, endY = by > ay ? b.y : b.y + b.h;
           const portA = a.x + a.w / 2 + lane, portB = b.x + b.w / 2 + lane;
-          return 'M ' + portA + ' ' + startY + ' V ' + ((startY + endY) / 2 + lane) + ' H ' + portB + ' V ' + endY;
+          const bendY = by > ay ? (a.rowBottom + b.y) / 2 : (b.rowBottom + a.y) / 2;
+          return 'M ' + portA + ' ' + startY + ' V ' + (bendY + lane) + ' H ' + portB + ' V ' + endY;
         }
         // Long routes use row gaps and the outside gutter; they never cross a node.
-        const down = by > ay, y1 = (down ? a.y + a.h + 24 : a.y - (a.hostHeader ? 42 : 24)) + lane;
-        const y2 = (down ? b.y - (b.hostHeader ? 42 : 24) : b.y + b.h + 24) + lane;
+        const down = by > ay, y1 = (down ? a.rowBottom + 24 : a.y - (a.hostHeader ? 42 : 24)) + lane;
+        const y2 = (down ? b.y - (b.hostHeader ? 42 : 24) : b.rowBottom + 24) + lane;
         const left = a.col === 0 || b.col === 0;
-        const gutter = left ? 4 + (edgeIndex % 4) * 5 : sceneWidth - 4 - (edgeIndex % 4) * 5;
+        const gutter = left ? 3 + (edgeIndex % 4) * 3 : sceneWidth - 3 - (edgeIndex % 4) * 3;
         return 'M ' + (a.x + a.w / 2) + ' ' + (down ? a.y + a.h : a.y) + ' V ' + y1 + ' H ' + gutter + ' V ' + y2 + ' H ' + (b.x + b.w / 2) + ' V ' + (down ? b.y : b.y + b.h);
       }
       function specs(s) {
@@ -551,11 +569,8 @@ const traces = {
           const [status, state] = value.split(' / ');
           return state ? 'Допуск: ' + status + ' · state: ' + state : value;
         };
-        const vmReadback = host => s.knowledge.vmHost === host
-          ? 'ВМ V: ' + s.knowledge.vmState + ' · последнее чтение'
-          : 'ВМ V: последнее чтение → ' + s.knowledge.vmHost;
         return {
-          detector: ['Consul / hostmonitor', s.knowledge.networks, 'Политика: all_down'],
+          detector: ['Hostmonitor · control', 'Hsrc: ' + s.knowledge.networks, 'Consul локально · all_down'],
           api: ['Masakari API', ...(['planned', 'return'].includes(mode) ? ['Плановое maintenance', 'Учёт состояния Hsrc'] : ['Incident → Watcher hold', 'Затем notification / RPC'])],
           controller: ['Masakari engine', s.protocol.phase, 'PowerOps + Tooz · внутри'],
           mistral: ['Mistral engine / executor', s.mistral.workflow === 'IDLE' ? 'Нет активного workflow' : s.mistral.workflow + (s.mistral.waiting ? ' · ждёт lock' : ''), s.mistral.action === '—' ? 'PowerOps + Tooz · внутри' : s.mistral.action],
@@ -565,74 +580,131 @@ const traces = {
           nova: ['Nova API', 'REST: сервисы и ВМ', 'Состояния — на хостах ниже'],
           conductor: ['Nova conductor', s.scheduling.stage === 'IDLE' ? 'Нет задачи evacuation' : s.scheduling.stage === 'DISPATCHED' ? 'Rebuild отправлен на Hdst' : 'Задача: rebuild_instance', 'Выбор → RPC в compute'],
           scheduler: ['Nova scheduler', s.scheduling.stage === 'SELECTING' ? 'Выбирает назначение' : s.scheduling.target === '—' ? 'Назначение не запрошено' : 'Выбрано: ' + s.scheduling.target, 'Ресурсы / фильтры · Placement'],
-          sourceCompute: ['nova-compute · Hsrc', s.knowledge.sourceService.startsWith('disable:') ? 'Результат Nova API:' : 'Nova API · последнее чтение:', serviceState(s.knowledge.sourceService), vmReadback('Hsrc')],
-          compute: ['nova-compute · Hdst', 'Nova service · начальное условие:', serviceState(s.knowledge.targetService), 'Guard: ' + e.operation + ' · proof: ' + (e.proof ? 'есть' : 'нет'), vmReadback('Hdst')],
-          ironic: ['Ironic / BMC', 'Readback: ' + s.knowledge.power, 'Off: ' + s.counts.fence + ' · On: ' + s.counts.powerOn],
-          source: ['libvirt / QEMU · Hsrc', 'Мир: питание ' + s.world.sourcePower.toUpperCase(), s.world.sourceVM === 'running' ? 'Домен v0 работает' : s.world.sourceVM === 'absent' ? 'Домена ВМ нет' : 'Домен v0 остановлен', 'Карантин: ' + (s.protocol.quarantine ? 'да' : 'нет')],
-          target: ['libvirt / QEMU · Hdst', 'Мир: питание ON', s.world.targetVM === 'running' ? 'Домен v1 работает' : 'Домена ВМ нет']
+          sourceCompute: ['nova-compute · Hsrc', s.knowledge.sourceService.startsWith('disable:') ? 'Результат Nova API:' : 'Nova API · последнее чтение:', serviceState(s.knowledge.sourceService)],
+          compute: ['nova-compute · Hdst', 'Nova service · начальное условие:', serviceState(s.knowledge.targetService), 'Guard: ' + e.operation + ' · proof: ' + (e.proof ? 'есть' : 'нет')],
+          ironic: ['Ironic API · control', 'Power API / readback', 'Наблюдение: ' + s.knowledge.power],
+          ironicConductor: ['Ironic conductor · control', 'Redfish / IPMI → BMC', 'Off: ' + s.counts.fence + ' · On: ' + s.counts.powerOn],
+          sourceConsul: ['Consul agents', s.world.sourcePower === 'off' ? 'ОС остановлена' : 'manage / tenant / storage'],
+          targetConsul: ['Consul agents', 'manage / tenant / storage'],
+          sourceBmc: ['BMC · вне ОС', 'Redfish / IPMI'],
+          targetBmc: ['BMC · вне ОС', 'Redfish / IPMI'],
+          source: ['libvirt / QEMU · Hsrc', 'Питание ' + s.world.sourcePower.toUpperCase() + ' · карантин: ' + (s.protocol.quarantine ? 'да' : 'нет')],
+          target: ['libvirt / QEMU · Hdst', 'Питание ON']
         };
+      }
+      function vmLocation(s) {
+        const running = [];
+        if (s.world.sourceVM === 'running') running.push('Hsrc (v0)');
+        if (s.world.targetVM === 'running') running.push('Hdst (v1)');
+        return 'ВМ V · мир модели: ' + (running.length ? 'работает на ' + running.join(' и ') : 'работающего экземпляра нет');
       }
       function drawScene() {
         const s = current().state, event = displayed(), m = event.signal;
         sceneWidth = Math.max(280, Math.floor(root.getBoundingClientRect().width));
         const cols = sceneWidth >= 680 ? 3 : sceneWidth >= 440 ? 2 : 1;
-        const margin = 24, gap = 48;
+        const margin = sceneWidth >= 680 ? 52 : 32, gap = 48;
         // Stable positions across scenarios: the storage hub sits between its
         // clients, while Nova/Ironic calls keep their own direct connections.
-        const controlRows = cols === 3 ? [
+        const haRows = cols === 3 ? [
           ['detector', 'api', 'operator'],
           ['controller', 'etcd', 'mistral'],
-          ['watcher', 'nova', 'ironic'],
-          ['scheduler', 'conductor']
+          ['watcher', 'ironic', 'ironicConductor']
         ] : cols === 2 ? [
           ['detector', 'operator'], ['api', 'controller'], ['etcd'],
-          ['mistral', 'watcher'], ['nova', 'ironic'], ['scheduler', 'conductor']
+          ['mistral', 'watcher'], ['ironic', 'ironicConductor']
         ] : [
           ['detector'], ['operator'], ['api'], ['controller'], ['etcd'],
-          ['mistral'], ['watcher'], ['nova'], ['ironic'], ['conductor'], ['scheduler']
+          ['mistral'], ['watcher'], ['ironic'], ['ironicConductor']
         ];
+        const novaRows = cols === 3 ? [['scheduler', 'nova', 'conductor']]
+          : cols === 2 ? [['nova', 'conductor'], ['scheduler']]
+          : [['nova'], ['conductor'], ['scheduler']];
         const hostCols = cols === 3 ? 2 : 1;
-        const rows = controlRows.map(ids => ({ ids, cols })).concat((hostCols === 2
-          ? [['sourceCompute', 'compute'], ['source', 'target']]
-          : [['sourceCompute'], ['source'], ['compute'], ['target']]).map(ids => ({ ids, cols: hostCols, host: true })));
+        const hostSlotWidth = (sceneWidth - margin * 2 - gap * (hostCols - 1)) / hostCols;
+        const hostWidth = Math.min(hostSlotWidth, 380);
+        const hostX = col => margin + col * (hostSlotWidth + gap) + (hostSlotWidth - hostWidth) / 2;
+        const hostAux = ids => ({ ids, cols: hostCols, host: true, auxiliary: true, section: 'hosts' });
+        const hostFull = ids => ({ ids, cols: hostCols, host: true, section: 'hosts' });
+        const rows = haRows.map(ids => ({ ids, cols, section: 'ha' }))
+          .concat(novaRows.map(ids => ({ ids, cols, section: 'nova' })))
+          .concat(hostCols === 2 ? [
+            hostAux(['sourceConsul', 'sourceBmc', 'targetConsul', 'targetBmc']),
+            hostFull(['sourceCompute', 'compute']), hostFull(['source', 'target'])
+          ] : [
+            hostAux(['sourceConsul', 'sourceBmc']), hostFull(['sourceCompute']), hostFull(['source']),
+            hostAux(['targetConsul', 'targetBmc']), hostFull(['compute']), hostFull(['target'])
+          ]);
         svg.replaceChildren(); positions = {};
-        const label = event.id + ': ' + event.title + '. ' + describeEvent(event) + '. Состояние после кадра ' + (index + 1) + '.';
+        const label = event.id + ': ' + event.title + '. ' + describeEvent(event) + '. Состояние после кадра ' + (index + 1) + '. ' + vmLocation(s) + '.';
         svg.setAttribute('aria-label', label); make('title', {}, label); make('desc', {}, event.detail);
         const defs = make('defs');
         Object.entries(colors).forEach(([kind, color]) => {
           const marker = make('marker', { id: 'ha-recovery-arrow-' + kind, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' }, undefined, defs);
           make('path', { d: 'M 0 1 L 9 5 L 0 9 Z', fill: color }, undefined, marker);
         });
-        const all = specs(s); let y = 30, row = 0;
+        const sections = {}, sectionLabels = { ha: 'HA / PowerOps · управление', nova: 'Nova · управление', hosts: 'Compute-хосты · агенты и ВМ' };
+        const sectionColors = { ha: 'var(--viz-series-1)', nova: 'var(--viz-series-4)', hosts: 'var(--viz-series-5)' };
+        const all = specs(s); let y = 12, row = 0;
         for (const layout of rows) {
             const actorIds = layout.ids;
-            const width = (sceneWidth - margin * 2 - gap * (layout.cols - 1)) / layout.cols;
-            if (actorIds.includes('sourceCompute') || (hostCols === 1 && actorIds.includes('compute'))) y += 28;
-            const entries = actorIds.map(id => {
-              const lines = all[id].flatMap((value, i) => wrap(value, width - 22).map(part => ({ value: part, cls: i === 0 ? 'ha-node-title' : i > 1 ? 'ha-secondary' : '' })));
-              if (m && m.from === id && m.to === id) lines.push({ value: m.localType === 'wait' ? '⏸ ОЖИДАНИЕ' : m.localType === 'timeout' ? '× ТАЙМ-АУТ' : m.folded ? '• СВОДНЫЙ ШАГ' : '• ЛОКАЛЬНО', cls: 'ha-node-title' });
-              return { id, lines };
+            const slotWidth = (sceneWidth - margin * 2 - gap * (layout.cols - 1)) / layout.cols;
+            const width = layout.auxiliary ? (hostWidth - 16) / 2 : Math.min(slotWidth, layout.host ? 380 : 240);
+            const sectionStart = !sections[layout.section];
+            if (sectionStart) {
+              sections[layout.section] = { top: y, label: sectionLabels[layout.section] };
+              y += 30;
+            }
+            if (layout.auxiliary) y += 28;
+            const entries = actorIds.flatMap((id, col) => {
+              if (!id) return [];
+              const lines = all[id].flatMap((value, i) => wrap(value, width - 20).map(part => ({ value: part, cls: i === 0 ? 'ha-node-title' : i > 1 ? 'ha-secondary' : '' })));
+              const vmState = id === 'source' ? s.world.sourceVM : id === 'target' ? s.world.targetVM : null;
+              const vmText = vmState === null ? null : vmState === 'absent' ? 'ВМ V: здесь нет' : 'ВМ V / ' + (id === 'source' ? 'v0' : 'v1') + (vmState === 'running' ? ' · работает' : ' · остановлена');
+              const vmLines = vmText ? wrap(vmText, width - 44) : [];
+              const vmHeight = vmText ? 12 + vmLines.length * 16 : 0;
+              const baseHeight = Math.max(60, 12 + lines.length * 16 + (vmText ? vmHeight + 4 : 0));
+              const local = m && m.from === id && m.to === id;
+              if (local) lines.push({ value: m.localType === 'wait' ? '⏸ ОЖИДАНИЕ' : m.localType === 'timeout' ? '× ТАЙМ-АУТ' : m.folded ? '• СВОДНЫЙ ШАГ' : '• ЛОКАЛЬНО', cls: 'ha-node-title' });
+              return [{ id, col, lines, baseHeight, height: baseHeight + (local ? 16 : 0), vmState, vmLines, vmHeight }];
             });
-            // Reserve the local-activity line so waiting does not move the hub.
-            const height = Math.max(114, ...entries.map(e => 24 + e.lines.length * 18));
-            entries.forEach(({ id, lines }, col) => {
+            // Keep one local-activity line in the row, without filling every
+            // component with the height of its tallest neighbour.
+            const rowHeight = Math.max(...entries.map(e => e.baseHeight)) + 16;
+            entries.forEach(({ id, col, lines, height, vmState, vmLines, vmHeight }) => {
               const centered = actorIds.length === 1 && layout.cols > 1;
-              const x = centered ? (sceneWidth - width) / 2 : margin + col * (width + gap);
-              positions[id] = { x, y, w: width, h: height, col: centered ? (layout.cols - 1) / 2 : col, row, hostHeader: ['sourceCompute', 'compute'].includes(id) };
+              const x = layout.auxiliary ? hostX(hostCols === 2 ? Math.floor(col / 2) : 0) + (col % 2) * (width + 16)
+                : centered ? (sceneWidth - width) / 2 : margin + col * (slotWidth + gap) + (slotWidth - width) / 2;
+              positions[id] = { x, y, w: width, h: height, rowBottom: y + rowHeight, col: centered ? (layout.cols - 1) / 2 : col, row, sectionStart, hostHeader: layout.auxiliary };
               const active = m && [m.from, m.to].includes(id);
               const group = make('g', { 'data-node': id, ...(id === 'etcd' ? { 'data-coordination-hub': true } : {}), ...(active && m.from === m.to ? { 'data-activity': m.localType || 'local' } : {}) });
               make('rect', { x, y, width, height, rx: 6, fill: id === 'etcd' ? 'color-mix(in srgb, var(--viz-series-1) 12%, var(--background))' : 'var(--muted)', stroke: active ? colors[m.kind] : id === 'etcd' ? 'var(--muted-foreground)' : 'var(--border)', 'stroke-width': active ? 2 : 1 }, undefined, group);
-              lines.forEach((line, i) => text(x + 11, y + 23 + i * 18, line.value, line.cls, group));
+              lines.forEach((line, i) => text(x + 10, y + 18 + i * 16, line.value, line.cls, group));
+              if (vmState !== null) {
+                const running = vmState === 'running', vmY = y + height - vmHeight - 6;
+                const mark = make('g', { 'data-vm-host': id === 'source' ? 'Hsrc' : 'Hdst', 'data-vm-state': vmState }, undefined, group);
+                make('rect', { x: x + 8, y: vmY, width: width - 16, height: vmHeight, rx: 4, fill: running ? 'color-mix(in srgb, var(--viz-series-1) 18%, var(--background))' : 'var(--background)', stroke: running ? 'var(--viz-series-1)' : 'var(--border)', 'stroke-dasharray': vmState === 'absent' ? '3 3' : 'none' }, undefined, mark);
+                text(x + 15, vmY + 18, running ? '●' : vmState === 'stopped' ? '■' : '—', 'ha-node-title', mark);
+                vmLines.forEach((line, i) => text(x + 29, vmY + 18 + i * 16, line, running ? 'ha-node-title' : 'ha-secondary', mark));
+              }
             });
-            y += height + gap; row += 1;
+            sections[layout.section].bottom = y + rowHeight;
+            y += rowHeight + gap; row += 1;
         }
         svg.setAttribute('viewBox', '0 0 ' + sceneWidth + ' ' + (y - 12)); svg.setAttribute('height', y - 12);
-        for (const [host, topId, bottomId, role] of [['Hsrc', 'sourceCompute', 'source', 'исходный хост'], ['Hdst', 'compute', 'target', 'принимающий хост']]) {
+        for (const [id, bounds] of Object.entries(sections)) {
+          const group = make('g', { 'data-section': id });
+          svg.insertBefore(group, svg.querySelector('[data-node]'));
+          make('rect', { x: margin - 12, y: bounds.top - 4, width: sceneWidth - 2 * (margin - 12), height: bounds.bottom - bounds.top + 12, rx: 8, fill: 'color-mix(in srgb, ' + sectionColors[id] + ' 4%, var(--background))', stroke: 'color-mix(in srgb, ' + sectionColors[id] + ' 45%, var(--border))' }, undefined, group);
+          const heading = text(margin, bounds.top + 14, bounds.label, 'ha-node-title', group);
+          heading.setAttribute('data-section-heading', id);
+        }
+        for (const [host, topId, bottomId, role] of [['Hsrc', 'sourceConsul', 'source', 'исходный хост'], ['Hdst', 'targetConsul', 'target', 'принимающий хост']]) {
           const top = positions[topId], bottom = positions[bottomId];
           const group = make('g', { 'data-host': host });
           svg.insertBefore(group, svg.querySelector('[data-node]'));
-          make('rect', { x: top.x - 8, y: top.y - 28, width: top.w + 16, height: bottom.y + bottom.h - top.y + 36, rx: 8, fill: 'none', stroke: 'var(--border)' }, undefined, group);
-          text(top.x, top.y - 10, host + ' · ' + role, 'ha-node-title', group);
+          make('rect', { x: top.x - 8, y: top.y - 28, width: hostWidth + 16, height: bottom.y + bottom.h - top.y + 36, rx: 8, fill: 'none', stroke: 'var(--border)' }, undefined, group);
+          const heading = text(top.x, top.y - 10, host + ' · ' + role, 'ha-node-title', group);
+          heading.setAttribute('data-section-heading', host);
         }
         const topology = make('g', { 'data-topology': true, 'aria-hidden': true });
         svg.insertBefore(topology, svg.querySelector('[data-node]'));
@@ -647,6 +719,7 @@ const traces = {
           const hops = [m.from, ...(m.via || []), m.to];
           const paths = hops.slice(1).map((to, i) => {
             const d = route(hops[i], to);
+            make('path', { d, fill: 'none', stroke: 'var(--background)', 'stroke-width': 6, 'aria-hidden': true }, undefined, layer);
             make('path', { d, fill: 'none', stroke: colors[m.kind], 'stroke-width': 2, 'stroke-dasharray': m.lost ? '55 100' : m.kind === 'observation' ? '5 4' : 'none', ...(m.lost ? { pathLength: 100 } : { 'marker-end': 'url(#ha-recovery-arrow-' + m.kind + ')' }), 'data-hop': hops[i] + '->' + to }, undefined, layer);
             return d;
           });
@@ -654,6 +727,13 @@ const traces = {
           packetLength = activePath.getTotalLength();
           packet = make('circle', { r: 5, fill: colors[m.kind], visibility: 'hidden', 'data-packet': true }, undefined, layer);
           if (m.lost) { const p = activePath.getPointAtLength(packetLength * .55); text(p.x - 4, p.y + 4, '×', 'ha-node-title', layer); }
+        }
+        // Heading halos keep routed connections distinct from group labels.
+        for (const heading of svg.querySelectorAll('[data-section-heading]')) {
+          heading.setAttribute('stroke', 'var(--background)');
+          heading.setAttribute('stroke-width', '4');
+          heading.setAttribute('paint-order', 'stroke');
+          svg.appendChild(heading);
         }
         drawPacket();
       }
@@ -671,6 +751,8 @@ const traces = {
         q('[data-position]').setAttribute('aria-valuetext', (index + 1) + ': ' + frame.title);
         q('[data-title]').textContent = event.id + ' · ' + event.title;
         q('[data-route]').textContent = describeEvent(event); q('[data-detail]').textContent = event.detail;
+        q('[data-vm-location]').textContent = vmLocation(s);
+        q('[data-vm-observation]').textContent = 'Последнее чтение Nova: ВМ V · ' + s.knowledge.vmHost + ' · ' + s.knowledge.vmState;
         q('[data-prev]').disabled = index === 0 && progress === 0;
         q('[data-next]').disabled = index === trace.frames.length - 1 || Boolean(frame.awaitOperator);
         q('[data-play]').disabled = Boolean(frame.awaitOperator);

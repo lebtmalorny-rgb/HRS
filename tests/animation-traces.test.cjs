@@ -168,6 +168,34 @@ test('research traces preserve temporal recovery and coordination invariants', a
     assert.ok(commands > 0, 'planned maintenance and return must contain guarded power commands');
   });
 
+  await t.test('physical power changes follow the authorized API, conductor and source BMC path', () => {
+    let effects = 0;
+    for (const mode of modes) {
+      const frames = traces[mode].frames;
+      for (const [i, frame] of frames.entries()) {
+        const previous = frames[i - 1]?.state;
+        if (!previous || previous.world.sourcePower === frame.state.world.sourcePower) continue;
+        effects++;
+        const before = frames.slice(0, i);
+        const request = before.findLastIndex((f, j) => j > 0 && ['fence', 'powerOn'].some(key => incremented(frames[j - 1].state, f.state, key)));
+        const conductor = before.findLastIndex(f => f.signal?.from === 'ironic' && f.signal?.to === 'ironicConductor' && f.signal?.kind === 'command');
+        const bmc = before.findLastIndex(f => f.signal?.from === 'ironicConductor' && f.signal?.to === 'sourceBmc' && f.signal?.kind === 'command');
+        assert.ok(request >= 0 && conductor > request && bmc > conductor, `${mode}: physical change needs the full authorized power path`);
+        assert.equal(frames[request].signal?.to, 'ironic');
+        assert.equal(frame.signal?.from, 'sourceBmc');
+        assert.equal(frame.signal?.to, 'source');
+        assert.equal(frame.signal?.kind, 'effect');
+        for (const stage of frames.slice(request + 1, i)) {
+          assert.equal(stage.state.world.sourcePower, frames[request].state.world.sourcePower, 'command forwarding is not physical completion');
+          assert.deepEqual(stage.state.counts, frames[request].state.counts, 'forwarding does not issue another PowerOps action');
+        }
+      }
+    }
+    assert.equal(effects, 6, 'all six power-changing scenarios must exercise the path');
+    assert.ok(traces.hold.frames.every(f => !['ironic', 'ironicConductor', 'sourceBmc'].includes(f.signal?.to)), 'policy hold must not send external power commands');
+    assert.ok(traces.contention.frames.every(f => !(f.signal?.from === 'mistral' && ['ironic', 'ironicConductor', 'sourceBmc'].includes(f.signal?.to))), 'the losing Mistral contender must not send external power commands');
+  });
+
   await t.test('return pauses without host ownership and reacquires it after the operator gate', () => {
     const frames = traces.return.frames;
     const pause = frames.findIndex(f => f.awaitOperator && f.state.mistral.workflow === 'PAUSED');
